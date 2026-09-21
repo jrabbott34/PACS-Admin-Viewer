@@ -6,6 +6,22 @@ A local-first web DICOM viewer built on Cornerstone3D. Everything runs in the br
 
 ## Run it
 
+**Easiest: double-click the launcher.** It installs dependencies the first time, frees port 5173 if a previous
+copy is still running, starts the server, and opens your browser to it automatically.
+
+- **Windows:** double-click `launch.bat`. A second window opens and must stay open while you use the viewer —
+  that's the server; close it when you're done.
+- **Mac:** double-click `launch.command` (first time only: right-click → Open, since it's from an unidentified
+  developer). **Linux:** run `./launch.command` from a terminal (or double-click it if your file manager runs
+  `.command`/executable scripts).
+
+Both scripts always use `http://localhost:5173/` — if you'd rather have a clickable shortcut to that exact
+page instead of running the launcher every time, drag the address bar's icon to your desktop (or use your OS's
+"create shortcut to this link") once the server is running. A browser shortcut alone can't start the server,
+though — you still need the launcher (or `npm run dev`) running first.
+
+**Manual (if you'd rather use the terminal directly):**
+
 ```bash
 npm install
 npm run dev        # http://localhost:5173

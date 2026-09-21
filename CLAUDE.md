@@ -10,6 +10,14 @@ pdfjs-dist 6 (**legacy build**). Plain DOM/CSS, no UI framework.
 ## Commands
 `npm install`, `npm run dev` (5173), `npm run build` (tsc + vite build), `npm run preview`.
 
+**Double-click launchers** for non-terminal users: `launch.bat` (Windows) and `launch.command` (macOS/Linux).
+Both: install deps on first run if `node_modules` is missing, kill whatever's already on port 5173 (fixes the
+"port keeps drifting to 5174, 5175…" confusion from running `npm run dev` twice without stopping the first),
+start `vite --port 5173 --strictPort` (fails loudly instead of silently picking a different port, since the
+kill step above already guarantees 5173 is free), wait ~3s, then open the browser to the fixed URL. Verified:
+running the launcher twice in a row (simulating "forgot the first one was still open") correctly frees the
+port and starts fresh on 5173 both times, rather than drifting.
+
 ## Layout
 | File | Role |
 | --- | --- |
