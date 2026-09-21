@@ -9,23 +9,40 @@
   <body>
     <div id="app">
       <header class="toolbar" role="toolbar" aria-label="Viewer tools">
-        <div class="group">
-          <button id="open-files" type="button">Open files</button>
-          <button id="open-folder" type="button">Open folder</button>
+        <div class="group flyout" id="menu-flyout">
+          <button id="menu-trigger" type="button" class="icon-btn" title="Menu" aria-label="Menu">
+            <span data-icon="menu"></span>
+          </button>
+          <div id="menu-panel" class="flyout-panel menu-panel" role="menu" aria-label="Menu">
+            <div class="flyout-section-label">Import</div>
+            <button type="button" class="flyout-item" id="menu-open-files"><span data-icon="import"></span>Open files…</button>
+            <button type="button" class="flyout-item" id="menu-open-folder"><span data-icon="import"></span>Open folder…</button>
+            <div class="flyout-divider"></div>
+            <div class="flyout-section-label">Export</div>
+            <button type="button" class="flyout-item" disabled title="Coming in phase 3"><span data-icon="export"></span>Export image (PNG/JPG)…</button>
+            <button type="button" class="flyout-item" disabled title="Coming in phase 3"><span data-icon="export"></span>Export DICOM…</button>
+            <div class="flyout-divider"></div>
+            <div class="flyout-section-label">Privacy</div>
+            <button type="button" class="flyout-item" disabled title="Coming in phase 3"><span data-icon="anonymize"></span>Anonymize &amp; export…</button>
+          </div>
         </div>
 
-        <div id="layout-group" class="group segmented" role="radiogroup" aria-label="Viewport layout"></div>
+        <div class="group flyout" id="layout-flyout">
+          <button id="layout-trigger" type="button" class="flyout-trigger" title="Viewport layout">
+            <span id="layout-trigger-icon"></span>
+            <span id="layout-trigger-label">1 × 1</span>
+            <span class="caret" data-icon="caret" data-icon-size="12"></span>
+          </button>
+          <div id="layout-panel" class="flyout-panel grid-panel" role="radiogroup" aria-label="Viewport layout"></div>
+        </div>
 
-        <div class="group segmented" role="radiogroup" aria-label="Left mouse button tool">
-          <button type="button" data-tool="scroll" title="Scroll (S) — drag to move through the stack">Scroll</button>
-          <button type="button" data-tool="wl" title="Window/Level (W) — drag to adjust">Window/Level</button>
-          <button type="button" data-tool="pan" title="Pan (P)">Pan</button>
-          <button type="button" data-tool="zoom" title="Zoom (Z)">Zoom</button>
-          <button type="button" data-tool="length" title="Length">Length</button>
-          <button type="button" data-tool="angle" title="Angle">Angle</button>
-          <button type="button" data-tool="rectangleroi" title="Rectangle ROI">Rect ROI</button>
-          <button type="button" data-tool="ellipticalroi" title="Ellipse ROI">Ellipse ROI</button>
-          <button type="button" data-tool="probe" title="Probe — pixel value at a point">Probe</button>
+        <div class="group flyout" id="tools-flyout">
+          <button id="tools-trigger" type="button" class="flyout-trigger" title="Left mouse button tool">
+            <span id="tools-trigger-icon"></span>
+            <span id="tools-trigger-label">Window/Level</span>
+            <span class="caret" data-icon="caret" data-icon-size="12"></span>
+          </button>
+          <div id="tools-panel" class="flyout-panel grid-panel" role="radiogroup" aria-label="Left mouse button tool"></div>
         </div>
 
         <div class="group wl">
@@ -34,18 +51,18 @@
           <select id="preset" aria-label="Window preset"></select>
         </div>
 
-        <div class="group">
-          <button id="btn-invert" type="button" title="Invert (I)">Invert</button>
-          <button id="btn-flip-h" type="button" title="Flip horizontally">Flip H</button>
-          <button id="btn-flip-v" type="button" title="Flip vertically">Flip V</button>
-          <button id="btn-rotate" type="button" title="Rotate 90° clockwise">Rotate</button>
-          <button id="btn-reset" type="button" title="Reset view (R)">Reset</button>
-          <button id="btn-clear-meas" type="button" title="Remove all measurements from the active viewport">Clear</button>
-          <button id="btn-link-scroll" type="button" aria-pressed="false" title="Scroll all viewports together">Link scroll</button>
+        <div class="group icons">
+          <button id="btn-invert" type="button" class="icon-btn" title="Invert (I)"><span data-icon="invert"></span><span class="sr-only">Invert</span></button>
+          <button id="btn-flip-h" type="button" class="icon-btn" title="Flip horizontally"><span data-icon="flip-h"></span><span class="sr-only">Flip horizontal</span></button>
+          <button id="btn-flip-v" type="button" class="icon-btn" title="Flip vertically"><span data-icon="flip-v"></span><span class="sr-only">Flip vertical</span></button>
+          <button id="btn-rotate" type="button" class="icon-btn" title="Rotate 90° clockwise"><span data-icon="rotate"></span><span class="sr-only">Rotate</span></button>
+          <button id="btn-reset" type="button" class="icon-btn" title="Reset view (R)"><span data-icon="reset"></span><span class="sr-only">Reset</span></button>
+          <button id="btn-clear-meas" type="button" class="icon-btn" title="Remove all measurements from the active viewport"><span data-icon="clear"></span><span class="sr-only">Clear measurements</span></button>
+          <button id="btn-link-scroll" type="button" class="icon-btn" aria-pressed="false" title="Scroll all viewports together"><span data-icon="link"></span><span class="sr-only">Link scroll</span></button>
         </div>
 
         <div class="group push">
-          <button id="btn-header" type="button" aria-pressed="false" title="DICOM header (H)">Header</button>
+          <button id="btn-header" type="button" class="icon-btn" aria-pressed="false" title="DICOM header (H)"><span data-icon="header"></span><span class="sr-only">Header</span></button>
         </div>
       </header>
 

@@ -13,8 +13,9 @@ npm run build      # type-check + production build into dist/
 npm run preview    # serve the production build
 ```
 
-Then drop files or folders onto the window, or use **Open files / Open folder**. Try the synthetic data in `samples/`
-(CT, MR, MONOCHROME1 X-ray, RLE / JPEG 2000 / JPEG-LS CT slices, a JPG, a PNG and a 2-page PDF).
+Then drop files or folders onto the window, or open the **☰ menu** (top left) → **Open files / Open folder**. Try
+the synthetic data in `samples/` (CT, MR, MONOCHROME1 X-ray, RLE / JPEG 2000 / JPEG-LS CT slices, a JPG, a PNG and
+a 2-page PDF).
 
 ## What works today (phases 1-2)
 
@@ -29,6 +30,9 @@ Then drop files or folders onto the window, or use **Open files / Open folder**.
 - CT window presets, typed W/L values, "Default" (from the DICOM tags) and "Full range".
 - Searchable DICOM header panel, including nested sequences and private tags (read-only), for the active cell.
 - Per-cell overlays: patient/study, series, image number, slice location and thickness, W/L, zoom.
+- Icon toolbar with three "explode down" pickers — **☰ Menu** (import; export and anonymize are visible but
+  disabled, coming in phase 3), **Layout**, and **Tools** — plus a compact row of icon buttons for invert, flip,
+  rotate, reset, clear measurements and link scroll.
 
 ## Mouse and keyboard
 

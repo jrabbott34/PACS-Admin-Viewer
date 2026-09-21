@@ -2,7 +2,9 @@ import './style.css';
 import { utilities as csUtils } from '@cornerstonejs/core';
 import { wadouri } from '@cornerstonejs/dicom-image-loader';
 import { initCornerstone } from './cs';
+import { createFlyout } from './flyout';
 import { HeaderPanel } from './header';
+import { fillIcons, icon, layoutIcon, type IconName } from './icons';
 import { entriesFromDataTransfer, filesFromEntries, ingest, library, orderedSeries } from './ingest';
 import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
 import { CT_PRESETS } from './presets';
@@ -22,7 +24,24 @@ const headerBtn = $<HTMLButtonElement>('#btn-header');
 const fileInput = $<HTMLInputElement>('#file-input');
 const folderInput = $<HTMLInputElement>('#folder-input');
 const linkScrollBtn = $<HTMLButtonElement>('#btn-link-scroll');
-const layoutGroupEl = $('#layout-group');
+const layoutPanelEl = $('#layout-panel');
+const layoutTriggerIconEl = $('#layout-trigger-icon');
+const layoutTriggerLabelEl = $('#layout-trigger-label');
+const toolsPanelEl = $('#tools-panel');
+const toolsTriggerIconEl = $('#tools-trigger-icon');
+const toolsTriggerLabelEl = $('#tools-trigger-label');
+
+const TOOL_META: Record<PrimaryTool, { icon: IconName; label: string; hint: string }> = {
+  scroll: { icon: 'scroll', label: 'Scroll', hint: 'Scroll (S) — drag to move through the stack' },
+  wl: { icon: 'wl', label: 'Window/Level', hint: 'Window/Level (W) — drag to adjust' },
+  pan: { icon: 'pan', label: 'Pan', hint: 'Pan (P)' },
+  zoom: { icon: 'zoom', label: 'Zoom', hint: 'Zoom (Z)' },
+  length: { icon: 'length', label: 'Length', hint: 'Length — measured in real-world units where calibrated' },
+  angle: { icon: 'angle', label: 'Angle', hint: 'Angle' },
+  rectangleroi: { icon: 'rectangleroi', label: 'Rectangle ROI', hint: 'Rectangle ROI' },
+  ellipticalroi: { icon: 'ellipticalroi', label: 'Ellipse ROI', hint: 'Ellipse ROI' },
+  probe: { icon: 'probe', label: 'Probe', hint: 'Probe — pixel value at a point' },
+};
 
 let layout: LayoutManager;
 let header: HeaderPanel;
@@ -91,16 +110,19 @@ function refreshToolbar(): void {
   $('#btn-flip-h').setAttribute('aria-pressed', String(st.flipH));
   $('#btn-flip-v').setAttribute('aria-pressed', String(st.flipV));
   linkScrollBtn.setAttribute('aria-pressed', String(layout.linkScroll));
+
+  const toolMeta = TOOL_META[layout.primaryTool];
+  toolsTriggerIconEl.innerHTML = icon(toolMeta.icon);
+  toolsTriggerLabelEl.textContent = toolMeta.label;
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
-    b.classList.toggle('active', b.dataset.tool === layout.primaryTool);
-    b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(b.dataset.tool === layout.primaryTool));
   }
+
+  layoutTriggerIconEl.innerHTML = layoutIcon(layout.layoutRows, layout.layoutCols);
+  layoutTriggerLabelEl.textContent = `${layout.layoutRows} × ${layout.layoutCols}`;
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-layout]')) {
     const [r, c] = b.dataset.layout!.split('x').map(Number);
-    const on = r === layout.layoutRows && c === layout.layoutCols;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-checked', String(on));
+    b.setAttribute('aria-checked', String(r === layout.layoutRows && c === layout.layoutCols));
   }
   for (const id of ['#btn-invert', '#btn-flip-h', '#btn-flip-v', '#btn-rotate', '#btn-reset', '#btn-clear-meas']) {
     ($(id) as HTMLButtonElement).disabled = none;
@@ -282,8 +304,10 @@ async function loadFiles(files: File[]): Promise<void> {
 
 // ---------- events ----------
 function wire(): void {
-  $('#open-files').addEventListener('click', () => fileInput.click());
-  $('#open-folder').addEventListener('click', () => folderInput.click());
+  fillIcons();
+
+  $('#menu-open-files').addEventListener('click', () => fileInput.click());
+  $('#menu-open-folder').addEventListener('click', () => folderInput.click());
   for (const input of [fileInput, folderInput]) {
     input.addEventListener('change', () => {
       const files = Array.from(input.files ?? []);
@@ -292,19 +316,32 @@ function wire(): void {
     });
   }
 
-  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
-    b.addEventListener('click', () => layout.setPrimaryTool(b.dataset.tool as PrimaryTool));
+  createFlyout($<HTMLButtonElement>('#menu-trigger'), $('#menu-panel'));
+  createFlyout($<HTMLButtonElement>('#tools-trigger'), toolsPanelEl);
+  createFlyout($<HTMLButtonElement>('#layout-trigger'), layoutPanelEl);
+
+  for (const [key, meta] of Object.entries(TOOL_META) as [PrimaryTool, (typeof TOOL_META)[PrimaryTool]][]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'flyout-item';
+    b.dataset.tool = key;
+    b.title = meta.hint;
+    b.setAttribute('role', 'radio');
+    b.innerHTML = `${icon(meta.icon)}<span>${meta.label}</span>`;
+    b.addEventListener('click', () => layout.setPrimaryTool(key));
+    toolsPanelEl.append(b);
   }
 
   for (const p of LAYOUT_PRESETS) {
     const b = document.createElement('button');
     b.type = 'button';
+    b.className = 'flyout-item';
     b.dataset.layout = `${p.rows}x${p.cols}`;
-    b.textContent = p.label;
     b.title = `${p.label} layout`;
     b.setAttribute('role', 'radio');
+    b.innerHTML = `${layoutIcon(p.rows, p.cols)}<span>${p.label}</span>`;
     b.addEventListener('click', () => layout.setLayout(p.rows, p.cols));
-    layoutGroupEl.append(b);
+    layoutPanelEl.append(b);
   }
 
   const applyTyped = () => {

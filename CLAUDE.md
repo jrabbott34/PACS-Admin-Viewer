@@ -20,7 +20,9 @@ pdfjs-dist 6 (**legacy build**). Plain DOM/CSS, no UI framework.
 | `src/viewport-cell.ts` | `ViewportCell`: one stack viewport's load/scroll/W-L/presentation state |
 | `src/layout.ts` | `LayoutManager`: shared RenderingEngine + one global ToolGroup, the grid of cells, active-cell tracking, layout presets, link-scroll, measurement-tool clearing |
 | `src/header.ts` | dcmjs-based tag reader and the searchable header panel |
-| `src/main.ts` | DOM wiring: toolbar, series list, thumbnails, per-cell overlays, drag/drop, shortcuts |
+| `src/icons.ts` | Hand-authored inline SVG icon set (no CDN); `icon()`, `layoutIcon()` (draws an actual rows x cols grid), `fillIcons()` |
+| `src/flyout.ts` | `createFlyout(trigger, panel)`: generic "explode down" popover (menu, layout picker, tool picker) |
+| `src/main.ts` | DOM wiring: toolbar, flyouts, series list, thumbnails, per-cell overlays, drag/drop, shortcuts |
 | `src/types.ts` | `Series`, `InstanceInfo`, `IngestReport` |
 | `samples/` | Synthetic test data + `generate_samples.py` (needs pydicom, numpy, pillow, reportlab) |
 | `tests/e2e/` | Headless Playwright (Python) checks; run from `samples/` |
@@ -61,6 +63,41 @@ Cornerstone shows for that fallback, see NOT verified below). `LayoutManager.cle
 all annotations for one cell via `tools.annotation.state.removeAnnotations(toolName, element)` per tool name,
 then calls `tools.utilities.triggerAnnotationRender(element)` — removal alone does not force the SVG annotation
 layer to redraw.
+
+## UI: flyouts and icons (post-phase-2 redesign)
+The toolbar was reworked from a row of always-visible text buttons into three "explode down" flyouts plus a
+compact row of icon buttons, using `createFlyout()` (`src/flyout.ts`) and the icon set in `src/icons.ts`:
+
+- **Menu** (`#menu-trigger` / `#menu-panel`, hamburger icon): Import (Open files/folder, wired to the real file
+  inputs), Export and Anonymize (disabled, `title="Coming in phase 3"` — these are real roadmap items, not
+  decoration; wire them up when phase 3 lands instead of adding new menu entries).
+- **Layout** (`#layout-trigger` / `#layout-panel`): a 3-column grid of the six `LAYOUT_PRESETS`, each rendered
+  with `layoutIcon(rows, cols)` — the icon is generated from the actual preset, not a static asset, so it can't
+  drift out of sync.
+- **Tools** (`#tools-trigger` / `#tools-panel`): a 3x3 grid of all nine `PrimaryTool`s (`TOOL_META` in
+  `main.ts` is the single source of icon/label/tooltip for each). Picking one closes the flyout (generic
+  behavior in `createFlyout`: any non-disabled button click inside the panel closes it).
+
+Both the Layout and Tools trigger buttons show the *current* selection's icon and label — updated in
+`refreshToolbar()` every time `layout.onChange` fires, from `TOOL_META[layout.primaryTool]` and
+`layoutIcon(layout.layoutRows, layout.layoutCols)`. `[data-tool]`/`[data-layout]` buttons still exist (now
+generated, not static HTML) and still carry `role="radio"`/`aria-checked`, so the existing toolbar-state
+refresh logic needed almost no change.
+
+Static toolbar/menu icons are placeholders in `index.html` (`<span data-icon="...">`) filled once by
+`fillIcons()` at the top of `wire()`. Dynamically generated buttons (Tools/Layout flyout items) call `icon()`/
+`layoutIcon()` directly instead, since there's no static placeholder to fill.
+
+Palette: cool slate background with a sky-blue accent (`--accent: #38bdf8`), replacing the original warm-gold
+theme — same CSS custom property names in `style.css`, just different values, so component rules didn't need
+touching. `--chrome-3` was added for flyout item hover state.
+
+**Verified**: headless Chromium — menu/layout/tools flyouts open and show correct content; picking a layout or
+tool closes its flyout and updates the trigger's icon/label; clicking outside an open flyout closes it; the
+existing `tests/e2e/*.py` suite (unmodified) still passes against the new toolbar, confirming no functional
+regression from the reskin. **Not verified**: real mouse hover/focus states, narrow-screen wrapping of the new
+toolbar groups, screen reader behavior of the flyouts (aria-hidden/aria-expanded are set, but not tested with
+an actual AT).
 
 ## Hard-won gotchas — read before changing anything here
 1. **`useLegacyMetadataProvider: true` in `cs.ts` is required.** With Cornerstone v5's default "naturalized metadata"
