@@ -78,7 +78,8 @@ slices, a JPG, a PNG and a 2-page PDF).
   measurements and link scroll. A **toolbar preferences** panel (sliders icon) lets you hide tools you don't
   use — a personal decluttering preference saved on your machine, not an access-control feature.
 - A splash screen ("PACS Admin DICOM Viewer", created by Jason Abbott) on launch — stays up until you click
-  **Open Viewer**, rather than flashing past automatically.
+  **Open Viewer**, rather than flashing past automatically. **Menu → About…** shows the same branding plus the
+  current version, any time after that.
 
 ## Mouse and keyboard
 

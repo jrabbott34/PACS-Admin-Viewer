@@ -552,6 +552,8 @@ function wire(): void {
       .then((r) => setStatus(`Anonymized ${r.instances} image${r.instances === 1 ? '' : 's'}, ${r.tagsChanged} tag${r.tagsChanged === 1 ? '' : 's'} changed`))
       .catch((e) => setStatus(`Anonymize failed: ${e instanceof Error ? e.message : e}`));
   });
+  $('#about-version').textContent = `Version ${__APP_VERSION__}`;
+  $('#menu-about').addEventListener('click', () => $<HTMLDialogElement>('#about-dialog').showModal());
   for (const input of [fileInput, folderInput]) {
     input.addEventListener('change', () => {
       const files = Array.from(input.files ?? []);
@@ -667,6 +669,11 @@ function wire(): void {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // A modal <dialog> (About…) is open — let its native Escape-to-close behavior run
+    // unimpeded rather than have our own Escape handler's preventDefault() swallow it,
+    // and don't let toolbar shortcuts (arrow keys, tool letters, Space) act on the
+    // viewport behind the modal either.
+    if (document.querySelector('dialog[open]')) return;
     const k = e.key;
     let handled = true;
     if (k === 'ArrowUp' || k === 'ArrowLeft' || k === 'PageUp') void layout.activeCell.step(-1);

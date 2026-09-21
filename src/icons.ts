@@ -30,7 +30,8 @@ export type IconName =
   | 'overlay'
   | 'play'
   | 'pause'
-  | 'settings';
+  | 'settings'
+  | 'info';
 
 const PATHS: Record<IconName, string> = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -64,6 +65,7 @@ const PATHS: Record<IconName, string> = {
   pause: '<rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/>',
   settings:
     '<path d="M3 6h21M3 12h21M3 18h21"/><circle cx="15" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="17" cy="18" r="2.2" fill="currentColor" stroke="none"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r="1.1" fill="currentColor" stroke="none"/>',
 };
 
 export function icon(name: IconName, size = 18): string {

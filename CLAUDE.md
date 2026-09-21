@@ -638,6 +638,36 @@ re-checking a box makes the button reappear; selecting Zoom as the primary tool 
 to a different, visible tool (`primaryTool` changes and the new tool's button is confirmed visible) rather than
 leaving the toolbar in a stuck state. The full pre-existing `tests/e2e/*.py` suite still passes.
 
+## About dialog
+Menu → About… (bottom of the flyout, its own section below Privacy) opens `#about-dialog`, a native HTML
+`<dialog>` (`.showModal()`) rather than a hand-rolled overlay — free backdrop, focus handling and Escape-to-close
+from the browser instead of reimplementing all three. Shows the app name/mark (same motif as the splash
+screen), version, "Created by Jason Abbott" (matching the splash byline), and a one-line reminder of the
+local-first/not-for-diagnostic-use rule that's already in the footer — repeated here because About is exactly
+where someone would look to double check it.
+
+- **Version comes from `package.json`, not a hand-typed string**: `vite.config.ts` reads `package.json` at
+  build time and injects it via `define: { __APP_VERSION__: JSON.stringify(pkg.version) }` (ambient type in
+  `src/app-version.d.ts`, alongside the existing `dcmjs.d.ts`/`fflate.d.ts` pattern for untyped/generated
+  globals). Bumping the version in one place is enough — nothing to remember to update in the dialog too.
+- **Gotcha caught by this feature, not before it**: the global `keydown` handler's Escape case (added for
+  cine's "stop all" shortcut) called `e.preventDefault()` unconditionally, which — it turns out — also
+  suppresses a native `<dialog>`'s own built-in Escape-to-close behavior (`showModal()` normally closes on
+  Escape for free; a `preventDefault()` on that same keydown from anywhere else in the page blocks it). First
+  manual test of the About dialog: Close button worked, Escape did nothing, dialog stuck open. Fixed by adding
+  one early return at the top of the handler — `if (document.querySelector('dialog[open]')) return;` — before
+  any of the app's own shortcut handling runs, so a modal dialog gets native behavior (Escape closes it) and
+  every toolbar shortcut (arrow keys, tool letters, Space, etc.) correctly stops reaching the viewport behind
+  it while the dialog has the user's attention. Worth remembering for any future `<dialog>` usage in this app:
+  the app-wide keydown listener needs this same guard, not just a check local to whatever feature adds the
+  dialog.
+
+**Verified** (headless Chromium): About opens on menu click and closes the menu flyout in the same click (same
+behavior as every other menu item); version text reads "Version 0.1.0" (matching `package.json`); byline reads
+"Created by Jason Abbott"; the dialog closes via its Close button; reopened and closed via Escape (confirming
+the fix above); the full pre-existing `tests/e2e/*.py` suite and the cine Escape-stop-all behavior both still
+pass after the keydown guard change.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 
