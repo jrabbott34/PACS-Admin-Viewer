@@ -41,14 +41,15 @@ slices, a JPG, a PNG and a 2-page PDF).
 - Open DICOM (uncompressed, RLE, JPEG, JPEG 2000, JPEG-LS), JPG, PNG, GIF, WebP, BMP, PDF and **.zip archives**
   of any of those (dropped or opened), including whole folders.
 - Series list with thumbnails, grouped by study; slices sorted by patient position, then instance number. Drag
-  the handle at its right edge to resize the panel, or click the sidebar icon in the toolbar to hide/show it.
+  the handle at its right edge to resize the panel, or click the sidebar icon next to the ☰ menu to hide/show it.
 - Viewport layouts: 1x1, 1x2, 2x1, 2x2, 2x3 and 3x3. Click a cell to make it active (shown with a teal
   highlight) — its series list entry gets highlighted too — then click a series to load it there, or drag a
   series from the list straight onto any cell. Switching layouts never loses what's loaded. Drag a cell's own
   label text onto another cell to swap their series (or copy, if the target is empty). **Double-click a cell**
   to maximize it to fill the whole grid; double-click again to restore.
-- Per-cell scroll, Window/Level, pan, zoom, invert, flip, rotate, reset. An optional "Link scroll" keeps every
-  cell's slice index in sync.
+- Per-cell scroll, Window/Level, pan, zoom, invert, flip, rotate, reset. **Reset all** resets every viewport in
+  the current layout in one click (the plain "Reset" button only resets the active cell). An optional "Link
+  scroll" keeps every cell's slice index in sync.
 - Measurement tools, always visible in their own toolbar group (no menu-diving): Length, Angle, Rectangle ROI,
   Ellipse ROI, Probe — calibrated to real-world units from the DICOM pixel spacing where available (Probe
   reports Hounsfield units directly on CT). "Clear" removes all measurements from the active cell. Length,

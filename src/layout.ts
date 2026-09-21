@@ -312,6 +312,17 @@ export class LayoutManager {
     this.setActive(targetIndex);
   }
 
+  /**
+   * Reset window/level, zoom, pan, flip and rotation for every cell in the current
+   * layout that has a series loaded — the single-cell "Reset" button only touches the
+   * active cell, which isn't enough once a study is spread across a 2x2/3x3 layout.
+   * ViewportCell.resetView() already no-ops on an empty cell, so this can run over
+   * every visible entry without filtering first.
+   */
+  async resetAll(): Promise<void> {
+    await Promise.all(this.visibleEntries().map((e) => e.cell.resetView()));
+  }
+
   /** Cells that belong to the current layout (in grid order). */
   visibleEntries(): VisibleEntry[] {
     const count = this.rows * this.cols;

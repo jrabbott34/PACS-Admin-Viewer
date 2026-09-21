@@ -134,6 +134,12 @@ function refreshToolbar(): void {
   const color = !!activeSeries?.isColor;
   const none = !activeSeries;
   wwEl.disabled = wcEl.disabled = presetEl.disabled = color || none;
+  const btnResetAll = $('#btn-reset-all') as HTMLButtonElement;
+  const anyLoaded = layout.visibleEntries().some((e) => e.cell.series);
+  btnResetAll.disabled = !anyLoaded;
+  btnResetAll.title = anyLoaded
+    ? 'Reset window/level, zoom, pan, flip and rotation for every viewport in this layout'
+    : 'Open a series first';
   $('#btn-invert').setAttribute('aria-pressed', String(st.invert));
   $('#btn-flip-h').setAttribute('aria-pressed', String(st.flipH));
   $('#btn-flip-v').setAttribute('aria-pressed', String(st.flipV));
@@ -496,6 +502,10 @@ function wire(): void {
   $('#btn-reset').addEventListener('click', () => {
     presetEl.value = 'default';
     void layout.activeCell.resetView();
+  });
+  $('#btn-reset-all').addEventListener('click', () => {
+    presetEl.value = 'default';
+    void layout.resetAll();
   });
   $('#btn-clear-meas').addEventListener('click', () => layout.clearMeasurements());
   linkScrollBtn.addEventListener('click', () => {

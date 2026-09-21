@@ -266,19 +266,6 @@ button[aria-pressed="true"], button.active {
 /* ---------- stage ---------- */
 .stage { grid-area: stage; position: relative; background: #000; min-width: 0; min-height: 0; }
 
-/* Sits just inside the stage, flush against the series panel's edge, so it reads as
-   part of the sidebar boundary rather than a toolbar button — stays put (and reachable)
-   whether the panel is open, resized or collapsed, since .stage always starts right where
-   .series ends. */
-.sidebar-toggle {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 4;
-  background: var(--chrome-2);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
-}
-
 .viewport-grid {
   position: absolute; inset: 0;
   display: grid;

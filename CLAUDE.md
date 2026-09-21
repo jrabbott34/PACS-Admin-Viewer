@@ -386,14 +386,20 @@ A batch of direct usability requests, all in `layout.ts` / `main.ts` / `style.cs
   `.collapsed` class instead of hiding via `hidden`, so the same variable drives both resize and collapse and
   there's only one code path to keep correct. Collapsing remembers the pre-collapse width (`seriesWidth` isn't
   reset), so un-collapsing restores exactly where it was, not the 248px default.
-  **The toggle button lives beside the sidebar, not in the toolbar**: it's `position: absolute` inside `.stage`
-  (`.sidebar-toggle` in `style.css`, `top: 8px; left: 8px`), not a toolbar `<button>`. `.stage` always starts
-  exactly where `.series` ends in the grid, so the button reads as attached to the panel's edge whether the
-  panel is open, resized, or collapsed — and staying inside `.stage` (rather than `.series`) means it's never
-  swept away when `.series.collapsed` zeroes out the panel's width, so it's always there to un-collapse. It was
-  originally a toolbar icon button (far end of the row); moved on request since a toggle for the thing next to
-  it reads more naturally sitting next to that thing. `z-index: 4` keeps it above `.empty` (`z-index: 2`) and
-  `.dropveil` (`z-index: 3`) so the "no images loaded" placeholder and the drag-drop overlay never cover it.
+  **The toggle button's position went through two iterations, both on direct request.** First it lived at the
+  far end of the toolbar's icon row (original design). Moved to `position: absolute` inside `.stage`, flush
+  against the sidebar's edge, so it read as attached to the panel it controls rather than a generic toolbar
+  button — reasoned to be more discoverable, but the user didn't spot it there and reported the button as
+  missing entirely (it was rendering correctly; headless testing confirmed it in every layout/state, so this
+  was a real "user didn't see it," not a bug) until told explicitly where to look. Moved again, per direct
+  instruction, to sit right beside `#menu-trigger` inside `#menu-flyout` (`index.html`) — an ordinary toolbar
+  `<button id="btn-toggle-series" class="icon-btn">` again, now next to the hamburger menu specifically because
+  that's the other control that governs what's visible/available around the viewport, so grouping them reads as
+  "viewer chrome" rather than either floating on the image or lost at the end of a long icon row. The lesson:
+  for a toggle whose whole job is to be find-able, a conventional toolbar position beats a cleverer one users
+  have to be told about — same lesson as the tool-selection flyout-to-always-visible change above, applied to
+  a single button instead of a whole tool group. `wireSeriesPanel()`/`applySeriesPanel()` in `main.ts` still
+  select the button by id, so none of the collapse/resize/aria wiring changed across either move.
   **Gotcha hit while building this**: the series list content (`renderSeriesList()`'s target) had to move from
   the outer `#series` aside into a new inner `#series-list` div, because `renderSeriesList()` calls
   `seriesEl.replaceChildren()` on every refresh — if that target were still the outer element, it would wipe
@@ -409,14 +415,29 @@ A batch of direct usability requests, all in `layout.ts` / `main.ts` / `style.cs
   actually visible underneath it, which was the series panel). Worth remembering next time a flyout-related
   test fails with a "some other element intercepts pointer events" message: check whether the flyout was
   actually opened first before suspecting a real z-index/stacking bug.
+- **"Reset all" button** (`#btn-reset-all`, `LayoutManager.resetAll()` in `layout.ts`): the existing `#btn-reset`
+  only ever touched `layout.activeCell` (by design — most toolbar actions are per-cell), which stopped being
+  enough once a study is spread across a 2x2/3x3 layout and the user wants every viewport back to its default
+  window/level, zoom, pan, flip and rotation in one click, not one cell at a time. `resetAll()` is just
+  `Promise.all(this.visibleEntries().map(e => e.cell.resetView()))` — `ViewportCell.resetView()` already no-ops
+  on a cell with no series loaded, so it can run over every visible entry unconditionally, populated or not.
+  Styled as a `.tool-btn` (icon + visible "Reset all" label) rather than joining its icon-only neighbors
+  (`#btn-reset`, invert, flip, rotate, etc.) as a bare icon — those are all single-cell actions where a mistake
+  is a one-cell undo, but this one touches every viewport in the layout at once, so it gets the same
+  can't-be-missed treatment as tool selection rather than relying on a tooltip alone to disambiguate it from
+  plain "Reset". Its `disabled` state is intentionally decoupled from the other per-cell action buttons in
+  `refreshToolbar()` (which all key off whether the *active* cell has a series): it's enabled whenever *any*
+  visible cell has a series loaded, since its whole point is to reach cells other than the active one.
 
 **Verified** (headless Chromium): the active cell's `box-shadow` computes to the teal `rgb(45, 212, 191)`;
 dragging one cell's series onto another (synthetic `DragEvent('drop', …)` with both MIME types, same technique
 as the series-list-to-cell drag test) correctly swaps two populated cells' series; double-click maximizes
 (`maximizedIndex` set, `.maximized` class present) and a second double-click restores it
 (`maximizedIndex → null`); dragging `#series-resize` changes `--series-w` by the drag distance (clamped);
-clicking the toggle button collapses to `0px` and restores the previous (resized) width, not the default. The
-full pre-existing `tests/e2e/*.py` suite still passes.
+clicking the toggle button collapses to `0px` and restores the previous (resized) width, not the default;
+in a 2x2 layout with two cells independently zoomed away from 1.0×, "Reset all" is disabled with nothing
+loaded, enabled once any cell has a series, and one click puts both cells' zoom back to 1.0× in the same pass.
+The full pre-existing `tests/e2e/*.py` suite still passes.
 
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.

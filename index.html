@@ -36,6 +36,7 @@
           <button id="menu-trigger" type="button" class="icon-btn" title="Menu" aria-label="Menu">
             <span data-icon="menu"></span>
           </button>
+          <button id="btn-toggle-series" type="button" class="icon-btn" aria-pressed="false" title="Show/hide the series panel"><span data-icon="sidebar"></span><span class="sr-only">Toggle series panel</span></button>
           <div id="menu-panel" class="flyout-panel menu-panel" role="menu" aria-label="Menu">
             <div class="flyout-section-label">Import</div>
             <button type="button" class="flyout-item" id="menu-open-files" title="DICOM, JPG, PNG, PDF and .zip archives"><span data-icon="import"></span>Open files…</button>
@@ -90,6 +91,7 @@
           <button id="btn-flip-v" type="button" class="icon-btn" title="Flip vertically"><span data-icon="flip-v"></span><span class="sr-only">Flip vertical</span></button>
           <button id="btn-rotate" type="button" class="icon-btn" title="Rotate 90° clockwise"><span data-icon="rotate"></span><span class="sr-only">Rotate</span></button>
           <button id="btn-reset" type="button" class="icon-btn" title="Reset view (R)"><span data-icon="reset"></span><span class="sr-only">Reset</span></button>
+          <button id="btn-reset-all" type="button" class="tool-btn" title="Reset window/level, zoom, pan, flip and rotation for every viewport in this layout"><span data-icon="reset"></span>Reset all</button>
           <button id="btn-clear-meas" type="button" class="icon-btn" title="Remove all measurements from the active viewport"><span data-icon="clear"></span><span class="sr-only">Clear measurements</span></button>
           <button id="btn-link-scroll" type="button" class="icon-btn" aria-pressed="false" title="Scroll all viewports together"><span data-icon="link"></span><span class="sr-only">Link scroll</span></button>
         </div>
@@ -105,7 +107,6 @@
       </aside>
 
       <main class="stage">
-        <button id="btn-toggle-series" type="button" class="icon-btn sidebar-toggle" aria-pressed="false" title="Show/hide the series panel"><span data-icon="sidebar"></span><span class="sr-only">Toggle series panel</span></button>
         <div id="viewport-grid" class="viewport-grid"></div>
         <div id="empty" class="empty">
           <h1>No images loaded</h1>
