@@ -9,6 +9,7 @@ export type PrimaryTool =
   | 'wl'
   | 'pan'
   | 'zoom'
+  | 'magnify'
   | 'length'
   | 'angle'
   | 'rectangleroi'
@@ -25,6 +26,7 @@ const TOOL_NAMES: Record<PrimaryTool, string> = {
   wl: tools.WindowLevelTool.toolName,
   pan: tools.PanTool.toolName,
   zoom: tools.ZoomTool.toolName,
+  magnify: tools.MagnifyTool.toolName,
   length: tools.LengthTool.toolName,
   angle: tools.AngleTool.toolName,
   rectangleroi: tools.RectangleROITool.toolName,

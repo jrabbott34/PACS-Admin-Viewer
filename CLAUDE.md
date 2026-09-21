@@ -491,6 +491,39 @@ actually persisted, not just reflected in stale in-memory state; with two distin
 leaves the other's series list entry and thumbnails completely intact; declining the confirm dialog leaves the
 series list unchanged. The full pre-existing `tests/e2e/*.py` suite still passes.
 
+## Magnify tool and overlay toggle
+Two more direct requests, both small additions to the existing tool/toolbar machinery rather than new
+subsystems:
+
+- **Magnify** is Cornerstone3D's own built-in `MagnifyTool` (`@cornerstonejs/tools`), not a hand-rolled loupe —
+  it already does exactly this: mousedown creates a small magnified sub-viewport that follows the drag and is
+  torn down on mouseup, entirely inside the library (`preMouseDownCallback`/`_dragCallback`/`_dragEndCallback`
+  in `MagnifyTool.js`). Wired in exactly like every other `PrimaryTool`: registered in `cs.ts`
+  (`tools.addTool(tools.MagnifyTool)`), added to the `PrimaryTool` union and `TOOL_NAMES` in `layout.ts`, and a
+  `data-tool="magnify"` button in the Navigate segmented group (`index.html`) — no `FIXED_BINDINGS` entry, since
+  unlike Zoom/Pan it's only meant to be reachable by deliberately selecting it, not layered under another tool.
+  Because it plugs into the same generic `TOOL_NAMES`-keyed loop `applyBindings()` already iterates, gotcha #12
+  (stale-binding accumulation) applies here too automatically — no special-casing needed, and confirmed by
+  testing Length immediately after a Magnify drag. **Icon note**: `zoom` was already a plain magnifying glass
+  glyph, so `magnify`'s icon reuses it with a `+` added inside the lens (same base path, two extra strokes) —
+  distinguishable at a glance, and the "Magnify" text label (this app never does icon-only tool buttons, see
+  "Tool selection is always-visible" above) removes any remaining ambiguity.
+- **Overlay toggle** (`#btn-toggle-overlays`, `O` key) hides the four corner-overlay text blocks (patient/study,
+  series, image number, W/L/zoom) across every cell at once, for an unobstructed look at the image or a clean
+  screenshot. Deliberately **CSS-only**, the same pattern as double-click-maximize: `.viewport-grid.no-overlays
+  .cell-overlay { display: none }`, toggled by a plain `overlaysVisible` boolean in `main.ts` — `refreshOverlays()`
+  keeps computing and setting the corner text on every frame exactly as before, the toggle just hides the
+  container, so there's no risk of the overlay data going stale or needing to be recomputed on re-enable. Global
+  across all cells (like Link scroll), not per-cell — the point is to see the unobstructed grid, not one clean
+  cell among cluttered ones. `aria-pressed`/title update directly in the click handler (`applyOverlaysToggle()`),
+  matching the series-panel collapse button's pattern rather than routing through `refreshToolbar()`.
+
+**Verified** (headless Chromium): selecting Magnify and holding-and-dragging on a cell creates a
+`.magnifyTool` element that's removed again on mouseup; switching to Length immediately afterward and drawing
+still works (no lingering tool-binding contamination, per gotcha #12); toggling overlays off hides all four
+corner text blocks (`.ov.tl` etc. no longer visible) and sets `aria-pressed="false"`; pressing `O` toggles them
+back on and flips `aria-pressed` back to `true`. The full pre-existing `tests/e2e/*.py` suite still passes.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 

@@ -42,6 +42,7 @@ const headerBtn = $<HTMLButtonElement>('#btn-header');
 const fileInput = $<HTMLInputElement>('#file-input');
 const folderInput = $<HTMLInputElement>('#folder-input');
 const linkScrollBtn = $<HTMLButtonElement>('#btn-link-scroll');
+const toggleOverlaysBtn = $<HTMLButtonElement>('#btn-toggle-overlays');
 const layoutPanelEl = $('#layout-panel');
 const layoutTriggerIconEl = $('#layout-trigger-icon');
 const layoutTriggerLabelEl = $('#layout-trigger-label');
@@ -440,10 +441,23 @@ function wireSeriesPanel(): void {
   });
 }
 
+// ---------- overlay text toggle ----------
+let overlaysVisible = true;
+
+function applyOverlaysToggle(): void {
+  gridEl.classList.toggle('no-overlays', !overlaysVisible);
+  toggleOverlaysBtn.setAttribute('aria-pressed', String(overlaysVisible));
+  toggleOverlaysBtn.title = overlaysVisible ? 'Hide overlays (O)' : 'Show overlays (O)';
+}
+
 // ---------- events ----------
 function wire(): void {
   fillIcons();
   wireSeriesPanel();
+  toggleOverlaysBtn.addEventListener('click', () => {
+    overlaysVisible = !overlaysVisible;
+    applyOverlaysToggle();
+  });
 
   $('#menu-open-files').addEventListener('click', () => fileInput.click());
   $('#menu-open-folder').addEventListener('click', () => folderInput.click());
@@ -587,9 +601,11 @@ function wire(): void {
     else if (k === 'w' || k === 'W') layout.setPrimaryTool('wl');
     else if (k === 'p' || k === 'P') layout.setPrimaryTool('pan');
     else if (k === 'z' || k === 'Z') layout.setPrimaryTool('zoom');
+    else if (k === 'm' || k === 'M') layout.setPrimaryTool('magnify');
     else if (k === 'i' || k === 'I') layout.activeCell.toggleInvert();
     else if (k === 'r' || k === 'R') $('#btn-reset').click();
     else if (k === 'h' || k === 'H') toggleHeader();
+    else if (k === 'o' || k === 'O') toggleOverlaysBtn.click();
     else handled = false;
     if (handled) e.preventDefault();
   });

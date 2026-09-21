@@ -48,9 +48,11 @@ slices, a JPG, a PNG and a 2-page PDF).
   series from the list straight onto any cell. Switching layouts never loses what's loaded. Drag a cell's own
   label text onto another cell to swap their series (or copy, if the target is empty). **Double-click a cell**
   to maximize it to fill the whole grid; double-click again to restore.
-- Per-cell scroll, Window/Level, pan, zoom, invert, flip, rotate, reset. **Reset all** resets every viewport in
-  the current layout in one click (the plain "Reset" button only resets the active cell). An optional "Link
-  scroll" keeps every cell's slice index in sync.
+- Per-cell scroll, Window/Level, pan, zoom, invert, flip, rotate, reset, and **Magnify** (hold and drag for a
+  loupe view). **Reset all** resets every viewport in the current layout in one click (the plain "Reset" button
+  only resets the active cell). An optional "Link scroll" keeps every cell's slice index in sync. The overlay
+  toggle button ("O") hides the corner text (patient/series/W-L/zoom) on every cell at once, for an unobstructed
+  look or a clean screenshot.
 - Measurement tools, always visible in their own toolbar group (no menu-diving): Length, Angle, Rectangle ROI,
   Ellipse ROI, Probe — calibrated to real-world units from the DICOM pixel spacing where available (Probe
   reports Hounsfield units directly on CT). "Clear" removes all measurements from the active cell. Length,
@@ -90,8 +92,8 @@ slices, a JPG, a PNG and a 2-page PDF).
 | Drag a cell's label onto another cell | Swap their series (or copy, if the target is empty) |
 | Arrow keys / Page Up / Page Down | Previous / next image (active cell) |
 | Home / End | First / last image (active cell) |
-| S, W, P, Z | Choose Scroll, Window/Level, Pan or Zoom |
-| I, R, H | Invert, reset, toggle the header panel (active cell) |
+| S, W, P, Z, M | Choose Scroll, Window/Level, Pan, Zoom or Magnify |
+| I, R, H, O | Invert, reset, toggle the header panel (active cell); toggle overlays (all cells) |
 
 ## Roadmap
 

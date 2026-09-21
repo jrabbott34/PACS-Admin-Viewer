@@ -299,6 +299,7 @@ button[aria-pressed="true"], button.active {
 .cs-el { position: absolute; inset: 0; }
 
 .cell-overlay { position: absolute; inset: 0; pointer-events: none; }
+.viewport-grid.no-overlays .cell-overlay { display: none; }
 .ov {
   position: absolute;
   padding: 8px 10px;

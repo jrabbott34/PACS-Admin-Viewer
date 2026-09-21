@@ -9,6 +9,7 @@ export type IconName =
   | 'wl'
   | 'pan'
   | 'zoom'
+  | 'magnify'
   | 'length'
   | 'angle'
   | 'rectangleroi'
@@ -25,7 +26,8 @@ export type IconName =
   | 'import'
   | 'export'
   | 'anonymize'
-  | 'sidebar';
+  | 'sidebar'
+  | 'overlay';
 
 const PATHS: Record<IconName, string> = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -34,6 +36,7 @@ const PATHS: Record<IconName, string> = {
   wl: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   pan: '<path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/>',
   zoom: '<circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/>',
+  magnify: '<circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/><path d="M10 7v6M7 10h6"/>',
   length: '<path d="M5 19L19 5"/><circle cx="5" cy="19" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="5" r="1.6" fill="currentColor" stroke="none"/>',
   angle: '<path d="M5 19L12 5L19 19"/><path d="M10.3 9.8l1.7-1.9 1.7 1.9"/>',
   rectangleroi: '<rect x="4" y="6" width="16" height="12" rx="1.5"/>',
@@ -52,6 +55,8 @@ const PATHS: Record<IconName, string> = {
   anonymize:
     '<path d="M3 3l18 18"/><path d="M10.6 5.1A9.4 9.4 0 0112 5c5 0 8.5 4 9.9 7a15 15 0 01-3 4M6.2 6.2A15 15 0 002.1 12c1 2 3 4.4 5.7 5.8M9.9 9.9a3 3 0 004.2 4.2"/>',
   sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  overlay:
+    '<path d="M4 8V5a1 1 0 0 1 1-1h3M20 8V5a1 1 0 0 0-1-1h-3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3"/>',
 };
 
 export function icon(name: IconName, size = 18): string {

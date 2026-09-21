@@ -18,6 +18,7 @@ export function initCornerstone(): Promise<void> {
         tools.WindowLevelTool,
         tools.PanTool,
         tools.ZoomTool,
+        tools.MagnifyTool,
         tools.StackScrollTool,
         tools.LengthTool,
         tools.AngleTool,
