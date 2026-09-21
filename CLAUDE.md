@@ -283,6 +283,30 @@ click added.
     clear of all four corners' overlay text, before diffing. Worth remembering for any future visual-regression
     test: screenshot a tighter element, or crop after the fact, whenever overlapping siblings could contaminate
     the comparison.
+12. **`ToolGroup.setToolActive()` merges bindings, it never drops one — a real bug in our own
+    `LayoutManager.applyBindings()`, not a Cornerstone design quirk like #9/#10.** Reported as: measurement
+    tools (Length, Ellipse, etc.) work the first time, but after zooming, panning, or clicking Reset, they stop
+    responding to drags — the tool button still shows selected/active, but dragging on the image draws nothing.
+    Root cause, confirmed by reading `@cornerstonejs/tools`' `ToolGroup.js`: `setToolActive(name, {bindings})`
+    computes `[...prevBindings, ...newBindings]` and dedupes — it only ever **adds** bindings, never removes
+    ones missing from the new list. `applyBindings()` loops over every tool on each `setPrimaryTool()` call and
+    calls `setToolActive` with a bindings array sized for *that* call (e.g. Zoom gets `[Secondary, Primary]`
+    while it's primary, then just `[Secondary]` once something else is selected) — but because Cornerstone only
+    adds, Zoom's old Primary binding never actually goes away. After a few tool switches, Zoom, Pan and
+    StackScroll all end up simultaneously `Active` and bound to the left mouse button alongside whichever
+    measurement tool is actually selected, and Cornerstone's own dispatch no longer reliably routes the drag to
+    the intended tool. `setToolPassive()`, by contrast, *does* actually clear bindings — but only the ones
+    matching `getDefaultPrimaryBindings()` unless you pass `{ removeAllBindings: true }`, which filters the
+    tool's binding list down to empty unconditionally. Fix: `applyBindings()` now calls
+    `this.toolGroup.setToolPassive(name, { removeAllBindings: true })` for every tool *before* recomputing and
+    (if non-empty) reactivating its bindings, so every tool starts each pass from a genuinely clean slate
+    instead of accreting stale bindings across tool switches. Confirmed via `tg.toolOptions` dumps in headless
+    Chromium: before the fix, `Zoom`'s bindings grew to `[2, 1]` and stayed there even after Zoom stopped being
+    primary; after the fix every non-primary tool's bindings match exactly what `FIXED_BINDINGS` says it should
+    have, with no accumulation across an arbitrary number of switches (verified with 15 randomized 3-tool switch
+    sequences, each followed by a successful Length draw). Also verified the fix doesn't regress the
+    always-available fixed bindings: right-drag zoom and W/L drag both still work regardless of which tool is
+    primary.
 
 ## Verified (headless Chromium 141, software WebGL)
 Dev and production builds; CT/MR/DX series, sorting, scroll (wheel, drag, keys); W/L drag, presets, typed values;

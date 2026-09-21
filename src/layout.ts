@@ -345,13 +345,29 @@ export class LayoutManager {
     this.scheduleEmit();
   }
 
+  /**
+   * Cornerstone's own ToolGroup.setToolActive() merges the bindings you pass it into
+   * whatever bindings that tool already had — it concatenates prevBindings + newBindings
+   * and dedupes, but never drops one on its own (see setToolActive in
+   * @cornerstonejs/tools' ToolGroup.js). Calling it here every time the primary tool
+   * changes, with a binding list that's meant to *shrink* for whichever tool just lost
+   * Primary, silently fails to shrink anything: Zoom/Pan/Scroll would each keep their
+   * stale Primary-mouse-button binding forever after their one turn as the primary tool,
+   * so after enough tool switches several tools end up simultaneously bound to the left
+   * mouse button and drags stop reliably reaching whichever measurement tool is actually
+   * selected. `setToolPassive(name, { removeAllBindings: true })` is the one call that
+   * genuinely clears a tool's bindings (it filters the existing list down to nothing), so
+   * every tool is fully reset before being reactivated with only the bindings it should
+   * currently have.
+   */
   private applyBindings(): void {
     const { MouseBindings } = tools.Enums;
     for (const key of Object.keys(TOOL_NAMES) as PrimaryTool[]) {
+      const name = TOOL_NAMES[key];
+      this.toolGroup.setToolPassive(name, { removeAllBindings: true });
       const bindings = [...(FIXED_BINDINGS[key] ?? [])];
       if (key === this.primary) bindings.push({ mouseButton: MouseBindings.Primary });
-      if (bindings.length) this.toolGroup.setToolActive(TOOL_NAMES[key], { bindings });
-      else this.toolGroup.setToolPassive(TOOL_NAMES[key]);
+      if (bindings.length) this.toolGroup.setToolActive(name, { bindings });
     }
   }
 
