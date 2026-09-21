@@ -27,7 +27,9 @@ export type IconName =
   | 'export'
   | 'anonymize'
   | 'sidebar'
-  | 'overlay';
+  | 'overlay'
+  | 'play'
+  | 'pause';
 
 const PATHS: Record<IconName, string> = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -57,6 +59,8 @@ const PATHS: Record<IconName, string> = {
   sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
   overlay:
     '<path d="M4 8V5a1 1 0 0 1 1-1h3M20 8V5a1 1 0 0 0-1-1h-3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3"/>',
+  play: '<path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/>',
+  pause: '<rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/>',
 };
 
 export function icon(name: IconName, size = 18): string {

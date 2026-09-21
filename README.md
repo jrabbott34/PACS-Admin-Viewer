@@ -49,7 +49,8 @@ slices, a JPG, a PNG and a 2-page PDF).
   label text onto another cell to swap their series (or copy, if the target is empty). **Double-click a cell**
   to maximize it to fill the whole grid; double-click again to restore.
 - Per-cell scroll, Window/Level, pan, zoom, invert, flip, rotate, reset, and **Magnify** (hold and drag for a
-  loupe view). **Reset all** resets every viewport in the current layout in one click (the plain "Reset" button
+  loupe view). **Cine** ("Space") auto-plays through the active cell's stack on a loop at a chosen frame rate
+  (5-30 fps). **Reset all** resets every viewport in the current layout in one click (the plain "Reset" button
   only resets the active cell). An optional "Link scroll" keeps every cell's slice index in sync. The overlay
   toggle button ("O") hides the corner text (patient/series/W-L/zoom) on every cell at once, for an unobstructed
   look or a clean screenshot.
@@ -94,6 +95,7 @@ slices, a JPG, a PNG and a 2-page PDF).
 | Home / End | First / last image (active cell) |
 | S, W, P, Z, M | Choose Scroll, Window/Level, Pan, Zoom or Magnify |
 | I, R, H, O | Invert, reset, toggle the header panel (active cell); toggle overlays (all cells) |
+| Space | Play/pause cine on the active cell |
 
 ## Roadmap
 

@@ -524,6 +524,52 @@ still works (no lingering tool-binding contamination, per gotcha #12); toggling 
 corner text blocks (`.ov.tl` etc. no longer visible) and sets `aria-pressed="false"`; pressing `O` toggles them
 back on and flips `aria-pressed` back to `true`. The full pre-existing `tests/e2e/*.py` suite still passes.
 
+## Cine mode
+Auto-play through the active cell's stack. Lives in `ViewportCell` (`play(fps)`/`pause()`/`playing` getter in
+`viewport-cell.ts`) rather than `LayoutManager` or `main.ts`, on the same reasoning as invert/flip/rotation:
+it's genuinely per-cell state, so it belongs on the object that already owns the rest of a cell's view state.
+
+- **Self-scheduling, not `setInterval`**: each tick is a `setTimeout` that only queues the *next* tick after
+  `goTo()`'s promise actually resolves, instead of firing on a fixed clock regardless of whether the previous
+  frame finished loading. A raw `setInterval` at, say, 24fps would keep firing every ~42ms even if a frame takes
+  longer than that to decode, queuing up overlapping `setImageIdIndex` calls; the self-scheduling loop can't get
+  ahead of itself that way — worst case it just runs slower than the requested fps on a slow series, never faster
+  or overlapping.
+- **Loops**: `(currentIndex + 1) % total`, wrapping back to frame 0 indefinitely rather than stopping at the
+  last image — this is what "cine" conventionally means (a looping clip), not a one-shot playthrough.
+- **`ViewportCell.load()` calls `this.pause()` first**, so playback can never keep ticking against a stack that
+  was just replaced out from under it. This one `pause()` call at the top of `load()` covers every path that
+  reassigns a cell's series — `assign()`, `swapCells()`, and (deliberately) `resetView()` too, since `resetView()`
+  re-runs `load()` on the same series to reset presentation state. So clicking **Reset** or **Reset all** on a
+  playing cell stops its cine — an accepted side effect of reusing the single "safely change the stack" choke
+  point rather than adding a second one; `resetView()` passes the current index through, so at least the reset
+  doesn't also jump playback back to frame 0.
+- **Toolbar**: `#btn-cine` (`Space` key) is styled like every other icon toggle (`aria-pressed`, title text) but
+  swaps its actual icon between `play`/`pause` glyphs on state change — the one departure from this app's usual
+  "single static glyph, color-highlight for on/off" toggle pattern (link scroll, overlay toggle, sidebar), because
+  play/pause is such a globally standard shape-swap convention that using a single static icon would read as
+  broken. `#cine-fps` (5/10/15/24/30, default 10) is read at play time; changing it while already playing calls
+  `cell.play(newFps)` again, which itself calls `pause()` first, so changing speed mid-playback just restarts the
+  timer at the new rate rather than stacking a second loop. Disabled whenever the active cell has no series or
+  only one image (`activeSeries.instances.length > 1`) — nothing to animate — checked independently of the
+  cine-specific `canPlay` other than reusing `activeSeries`, not folded into the generic `none`-keyed disable
+  loop in `refreshToolbar()` the way most single-cell buttons are, since the condition (more than one image) is
+  cine-specific.
+- **Not built**: cine doesn't auto-pause on manual scroll/wheel/drag interaction with the same cell — if you
+  scroll a playing cell by hand, the next cine tick will just overwrite wherever you scrolled to. Accepted as a
+  known v1 limitation rather than adding interrupt-detection across every scroll input path (wheel, drag, arrow
+  keys, link-scroll) for what's a fairly minor UX rough edge. Also doesn't pause when a playing cell is scrolled
+  out of the current layout (e.g. 2x2 → 1x1 hides cell 2) — consistent with how nothing else in this app pauses
+  hidden-cell state either (link scroll keeps syncing hidden cells too).
+
+**Verified** (headless Chromium): disabled with nothing loaded and for a single-image series; enabled for a
+24-image CT series; clicking Play advances `currentIndex` (confirmed non-zero after a short wait at 24fps) and
+sets `aria-pressed="true"`; `Space` pauses it, and the index stops changing while paused; playing for enough
+ticks to exceed the frame count wraps back into `[0, total)` and keeps playing rather than stopping; switching
+the active cell to an empty one disables the button, switching back re-enables it (still reflecting that
+specific cell's own play state, not a global one); loading a different series into a playing cell auto-pauses
+it. The full pre-existing `tests/e2e/*.py` suite still passes.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 

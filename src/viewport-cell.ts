@@ -12,6 +12,7 @@ export interface ViewState {
   flipH: boolean;
   flipV: boolean;
   rotation: number;
+  playing: boolean;
 }
 
 /**
@@ -22,6 +23,8 @@ export class ViewportCell {
   series: Series | null = null;
   /** Invert flag Cornerstone applies by default (true for MONOCHROME1). */
   private baseInvert = false;
+  private playTimer: ReturnType<typeof setTimeout> | null = null;
+  private playing_ = false;
 
   constructor(
     readonly viewportId: string,
@@ -40,6 +43,7 @@ export class ViewportCell {
 
   // ---- series / stack ----
   async load(series: Series, index = 0): Promise<void> {
+    this.pause();
     this.series = series;
     const ids = series.instances.map((i) => i.imageId);
     await this.viewport.setStack(ids, Math.min(index, ids.length - 1));
@@ -65,6 +69,40 @@ export class ViewportCell {
 
   step(delta: number): Promise<void> {
     return this.goTo(this.currentIndex + delta);
+  }
+
+  // ---- cine ----
+  get playing(): boolean {
+    return this.playing_;
+  }
+
+  /**
+   * Loop through every image at the given frame rate, wrapping back to the start.
+   * Self-scheduling (each tick waits for the previous goTo() to actually resolve
+   * before queuing the next one) rather than a raw setInterval, so a slow decode
+   * can't pile up overlapping frame advances.
+   */
+  play(fps = 10): void {
+    this.pause();
+    if (!this.series || this.series.instances.length < 2) return;
+    this.playing_ = true;
+    const delayMs = 1000 / Math.max(1, fps);
+    const tick = () => {
+      this.playTimer = setTimeout(async () => {
+        if (!this.playing_ || !this.series) return;
+        await this.goTo((this.currentIndex + 1) % this.series.instances.length);
+        if (this.playing_) tick();
+      }, delayMs);
+    };
+    tick();
+  }
+
+  pause(): void {
+    this.playing_ = false;
+    if (this.playTimer !== null) {
+      clearTimeout(this.playTimer);
+      this.playTimer = null;
+    }
   }
 
   // ---- window / level ----
@@ -152,6 +190,7 @@ export class ViewportCell {
       flipH: !!pres.flipHorizontal,
       flipV: !!pres.flipVertical,
       rotation: pres.rotation ?? 0,
+      playing: this.playing_,
     };
   }
 }

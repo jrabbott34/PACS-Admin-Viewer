@@ -86,6 +86,17 @@
           <select id="preset" aria-label="Window preset"></select>
         </div>
 
+        <div class="group cine">
+          <button id="btn-cine" type="button" class="icon-btn" aria-pressed="false" title="Play (Space) — active cell"><span data-icon="play"></span><span class="sr-only">Play/pause cine</span></button>
+          <select id="cine-fps" aria-label="Cine speed">
+            <option value="5">5 fps</option>
+            <option value="10" selected>10 fps</option>
+            <option value="15">15 fps</option>
+            <option value="24">24 fps</option>
+            <option value="30">30 fps</option>
+          </select>
+        </div>
+
         <div class="group icons">
           <button id="btn-invert" type="button" class="icon-btn" title="Invert (I)"><span data-icon="invert"></span><span class="sr-only">Invert</span></button>
           <button id="btn-flip-h" type="button" class="icon-btn" title="Flip horizontally"><span data-icon="flip-h"></span><span class="sr-only">Flip horizontal</span></button>

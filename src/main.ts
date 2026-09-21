@@ -4,7 +4,7 @@ import { initCornerstone } from './cs';
 import { anonymizeSeriesAndExport, exportCellImage, exportSeriesDicomZip } from './export';
 import { createFlyout } from './flyout';
 import { HeaderPanel } from './header';
-import { fillIcons, layoutIcon } from './icons';
+import { fillIcons, icon, layoutIcon } from './icons';
 import {
   entriesFromDataTransfer,
   filesFromEntries,
@@ -43,6 +43,9 @@ const fileInput = $<HTMLInputElement>('#file-input');
 const folderInput = $<HTMLInputElement>('#folder-input');
 const linkScrollBtn = $<HTMLButtonElement>('#btn-link-scroll');
 const toggleOverlaysBtn = $<HTMLButtonElement>('#btn-toggle-overlays');
+const cineBtn = $<HTMLButtonElement>('#btn-cine');
+const cineIconEl = $('#btn-cine [data-icon]');
+const cineFpsEl = $<HTMLSelectElement>('#cine-fps');
 const layoutPanelEl = $('#layout-panel');
 const layoutTriggerIconEl = $('#layout-trigger-icon');
 const layoutTriggerLabelEl = $('#layout-trigger-label');
@@ -146,6 +149,17 @@ function refreshToolbar(): void {
   $('#btn-flip-h').setAttribute('aria-pressed', String(st.flipH));
   $('#btn-flip-v').setAttribute('aria-pressed', String(st.flipV));
   linkScrollBtn.setAttribute('aria-pressed', String(layout.linkScroll));
+
+  const canPlay = !!activeSeries && activeSeries.instances.length > 1;
+  cineBtn.disabled = !canPlay;
+  cineFpsEl.disabled = !canPlay;
+  cineBtn.setAttribute('aria-pressed', String(st.playing));
+  cineBtn.title = !canPlay
+    ? 'Cine needs a series with more than one image'
+    : st.playing
+      ? 'Pause (Space) — active cell'
+      : 'Play (Space) — active cell';
+  cineIconEl.innerHTML = icon(st.playing ? 'pause' : 'play', 18);
 
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
     const on = b.dataset.tool === layout.primaryTool;
@@ -554,6 +568,15 @@ function wire(): void {
     layout.linkScroll = !layout.linkScroll;
     linkScrollBtn.setAttribute('aria-pressed', String(layout.linkScroll));
   });
+  cineBtn.addEventListener('click', () => {
+    const cell = layout.activeCell;
+    if (cell.playing) cell.pause();
+    else cell.play(Number(cineFpsEl.value));
+  });
+  cineFpsEl.addEventListener('change', () => {
+    const cell = layout.activeCell;
+    if (cell.playing) cell.play(Number(cineFpsEl.value));
+  });
   headerBtn.addEventListener('click', toggleHeader);
 
   layout.onChange(refreshAll);
@@ -606,6 +629,7 @@ function wire(): void {
     else if (k === 'r' || k === 'R') $('#btn-reset').click();
     else if (k === 'h' || k === 'H') toggleHeader();
     else if (k === 'o' || k === 'O') toggleOverlaysBtn.click();
+    else if (k === ' ') cineBtn.click();
     else handled = false;
     if (handled) e.preventDefault();
   });
