@@ -1,6 +1,7 @@
 import dicomParser from 'dicom-parser';
 import { wadouri } from '@cornerstonejs/dicom-image-loader';
 import { unzipSync } from 'fflate';
+import { saveBlob } from './persist';
 import type { IngestReport, InstanceInfo, Series, SeriesKind } from './types';
 import { wrapPdfFile, wrapRasterFile } from './wrap';
 
@@ -164,6 +165,7 @@ async function register(
   c: Candidate,
   touched: Set<Series>,
   report: IngestReport,
+  persist: boolean,
 ): Promise<void> {
   const ds = await readHeader(c.blob);
   if (!ds || (!ds.elements.x00080018 && !ds.elements.x00080016)) {
@@ -187,6 +189,7 @@ async function register(
     return;
   }
   library.sops.add(sop);
+  if (persist) void saveBlob(sop, c.blob);
 
   const seriesUid = ds.string('x0020000e') ?? `no-series-uid:${c.name}`;
   const photometric = ds.string('x00280004') ?? 'MONOCHROME2';
@@ -259,7 +262,9 @@ function sortInstances(list: InstanceInfo[]): void {
 export async function ingest(
   files: File[],
   onProgress?: (done: number, total: number) => void,
+  opts: { persist?: boolean } = {},
 ): Promise<IngestReport> {
+  const persist = opts.persist ?? true;
   const report: IngestReport = { touched: [], instancesAdded: 0, duplicates: 0, skipped: [] };
   const touched = new Set<Series>();
   const expanded = await expandArchives(files);
@@ -270,13 +275,13 @@ export async function ingest(
     try {
       const kind = await sniff(file);
       if (kind === 'dicom' || kind === 'unknown') {
-        await register({ blob: file, name: file.name, kind: 'dicom' }, touched, report);
+        await register({ blob: file, name: file.name, kind: 'dicom' }, touched, report, persist);
       } else if (kind === 'pdf') {
         const { blobs, truncated } = await wrapPdfFile(file);
         if (truncated) report.skipped.push({ name: file.name, reason: 'only the first 100 pages were loaded' });
-        for (const b of blobs) await register({ blob: b, name: file.name, kind: 'pdf' }, touched, report);
+        for (const b of blobs) await register({ blob: b, name: file.name, kind: 'pdf' }, touched, report, persist);
       } else {
-        for (const b of await wrapRasterFile(file)) await register({ blob: b, name: file.name, kind: 'image' }, touched, report);
+        for (const b of await wrapRasterFile(file)) await register({ blob: b, name: file.name, kind: 'image' }, touched, report, persist);
       }
     } catch (e) {
       report.skipped.push({ name: file.name, reason: e instanceof Error ? e.message : String(e) });

@@ -29,6 +29,7 @@ port and starts fresh on 5173 both times, rather than drifting.
 | `src/layout.ts` | `LayoutManager`: shared RenderingEngine + one global ToolGroup, the grid of cells, active-cell tracking, layout presets, link-scroll, measurement-tool clearing |
 | `src/header.ts` | dcmjs-based tag reader/editor: the searchable header panel, admin edit mode, change log, regenerate-UID |
 | `src/export.ts` | Export DICOM (zip), export the active cell's frame as PNG/JPG, anonymize-and-export a series |
+| `src/persist.ts` | IndexedDB-backed local library: save/load/clear blobs, `requestPersistence`, `estimateUsage` |
 | `src/icons.ts` | Hand-authored inline SVG icon set (no CDN); `icon()`, `layoutIcon()` (draws an actual rows x cols grid), `fillIcons()` |
 | `src/flyout.ts` | `createFlyout(trigger, panel)`: generic "explode down" popover (menu, layout picker, tool picker) |
 | `src/main.ts` | DOM wiring: toolbar, flyouts, series list, thumbnails, per-cell overlays, drag/drop, shortcuts |
@@ -259,11 +260,58 @@ Real GPU rendering, Firefox/Safari, studies of 500+ slices (memory, load time), 
 multi-frame and enhanced CT/MR (code path exists, no test file), JPEG lossy and HTJ2K, DICOMDIR, very large PDFs
 (capped at 100 pages), layout on narrow screens (series list is simply hidden below 820px).
 
+## Local library (IndexedDB persistence)
+Added after phase 3, outside the original phase numbering: everything imported now survives closing the tab,
+via `src/persist.ts` (a small IndexedDB wrapper — one object store, blobs keyed by SOPInstanceUID). This was a
+deliberate, scoped choice over the two bigger alternatives — a real Query/Retrieve client (nothing to query
+against yet; the user has no PACS/DICOMweb server) and a local PACS server with its own database and background
+process (real infrastructure, not justified by anything asked for so far). IndexedDB gets "still there next
+time" with zero new setup and no service to run, without ruling either bigger option out later.
+
+- `ingest()` takes `{ persist?: boolean }` (default `true`); `register()` calls `saveBlob(sop, blob)`
+  (fire-and-forget) for every newly-registered instance when persisting. Startup restore (`restoreLibrary()` in
+  `main.ts`) re-ingests every saved blob through the exact same `ingest()`/`loadFiles()` path a fresh drop would
+  use, with `persist: false` (so restoring doesn't re-save what was just loaded from storage) — this reuses all
+  existing sniffing/grouping/sorting logic instead of duplicating it, and means a restored library looks and
+  behaves identically to a fresh import.
+- Header edits write through too: `header.onCommit` in `main.ts` calls `saveBlob(instance.sop, blob)` alongside
+  the existing `library.edited` in-memory override, so an edited PatientName (for example) is still edited
+  after a reload, not just for the rest of the session.
+- **Clear local library** (Menu → Local library) clears IndexedDB then calls `location.reload()` — deliberately
+  *not* hand-rolled in-place viewport clearing. Cornerstone's `StackViewport.setStack()` isn't meant to be
+  pointed at an empty array (reads `imageIds[currentImageIdIndex]` unconditionally, which would be `undefined`),
+  so reusing the exact same clean-slate path a fresh launch takes is both simpler and safer than trying to
+  reset five cells' viewport state by hand.
+- `requestPersistence()` (best-effort `navigator.storage.persist()`) is called once on startup so the browser
+  is less likely to evict the library under storage pressure. `estimateUsage()` exists in `persist.ts` but isn't
+  wired into any UI yet — a natural next step if someone wants to see how much space the library is using.
+
+**Verified** (headless Chromium, using a persistent browser context so IndexedDB survives across page reloads
+the way a real browser profile would): import → reload the page → the same series are still in the list;
+editing a header tag (PatientName) → reload → the edit is still there, both in the table and the series list's
+study title; Clear local library → confirmed empty afterward with a clean "Ready" status; zero console errors
+throughout. The full pre-existing `tests/e2e/*.py` suite (each launches its own fresh, non-persistent browser
+context, so no cross-test contamination) still passes. **Not verified**: storage quota exhaustion behavior
+(what happens when the browser refuses to store more), a library large enough that `restoreLibrary()`'s startup
+re-ingest is slow, IndexedDB behavior in a private/incognito window (typically ephemeral or blocked by design —
+the library just won't survive there, which is correct, not a bug to fix).
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 
-**Phase 3 — import/export and header editing. Done**, see above. DICOMweb (QIDO/WADO/STOW) — talking to a real
-PACS instead of local files — was never in scope for phase 3 and is still a later option, not started.
+**Phase 3 — import/export and header editing. Done**, see above.
+
+**Local library persistence. Done**, see above — added between phases 3 and 4 in response to a direct request,
+not part of the original plan.
+
+**DICOMweb (QIDO-RS/WADO-RS) Query/Retrieve** — talking to a real PACS instead of local files — is still a
+later option, not started, and explicitly *not* recommended until there's an actual server to point it at.
+Revisit if the user gets access to one.
+
+**A local PACS server** (disk storage + a real database + a background service, enabling multi-device access
+and true C-FIND/C-MOVE-style retrieval) was considered and explicitly deferred in favor of the much lighter
+IndexedDB approach above. Revisit only if a real need for multi-device/multi-user access or archival-scale
+storage shows up — nothing so far has needed it.
 
 **Phase 4 — hanging protocols.** JSON schema: matching rules (modality, body part, laterality, series description,
 prior vs current), a layout, ordered display-set assignments, per-cell defaults (W/L, orientation). A builder that

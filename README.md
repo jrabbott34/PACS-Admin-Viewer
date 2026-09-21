@@ -33,8 +33,11 @@ Then drop files, folders or **.zip archives** onto the window, or open the **☰
 Open folder**. Try the synthetic data in `samples/` (CT, MR, MONOCHROME1 X-ray, RLE / JPEG 2000 / JPEG-LS CT
 slices, a JPG, a PNG and a 2-page PDF).
 
-## What works today (phases 1-3)
+## What works today (phases 1-3, plus a local library)
 
+- **Everything you import is saved in this browser**, so it's still there next time you open the app — you
+  don't need to re-import your files every session. It never leaves your machine (same rule as everything else
+  here); Menu → Local library → **Clear local library** deletes it all if you want a clean slate.
 - Open DICOM (uncompressed, RLE, JPEG, JPEG 2000, JPEG-LS), JPG, PNG, GIF, WebP, BMP, PDF and **.zip archives**
   of any of those (dropped or opened), including whole folders.
 - Series list with thumbnails, grouped by study; slices sorted by patient position, then instance number.
@@ -79,4 +82,6 @@ slices, a JPG, a PNG and a 2-page PDF).
 
 ## Roadmap
 
-Phases 1-3 are done. See `CLAUDE.md` for the phase 4 plan (hanging protocols).
+Phases 1-3 are done, plus local library persistence. See `CLAUDE.md` for the phase 4 plan (hanging protocols).
+Query/Retrieve against a real PACS and a local PACS server (with its own database) were both considered and
+deliberately deferred — see `CLAUDE.md` for why.

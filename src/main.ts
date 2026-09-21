@@ -16,6 +16,7 @@ import {
   resolveInstanceBlob,
 } from './ingest';
 import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
+import { clearLibrary, loadAllBlobs, requestPersistence, saveBlob } from './persist';
 import { CT_PRESETS } from './presets';
 import type { Series } from './types';
 
@@ -291,12 +292,17 @@ function refreshAll(): void {
 }
 
 // ---------- loading files ----------
-async function loadFiles(files: File[]): Promise<void> {
+async function loadFiles(files: File[], opts: { persist?: boolean; label?: string } = {}): Promise<void> {
   if (!files.length) return;
-  setStatus(`Reading ${files.length} file${files.length === 1 ? '' : 's'}…`);
-  const report = await ingest(files, (done, total) => {
-    if (done % 8 === 0 || done === total) setStatus(`Reading files… ${done} / ${total}`);
-  });
+  const persist = opts.persist ?? true;
+  setStatus(opts.label ?? `Reading ${files.length} file${files.length === 1 ? '' : 's'}…`);
+  const report = await ingest(
+    files,
+    (done, total) => {
+      if (done % 8 === 0 || done === total) setStatus(`Reading files… ${done} / ${total}`);
+    },
+    { persist },
+  );
   renderSeriesList();
   if (report.touched.length) emptyEl.hidden = true;
 
@@ -321,12 +327,36 @@ async function loadFiles(files: File[]): Promise<void> {
   }
 }
 
+/** Reload everything saved from a previous session (IndexedDB) back into the library. */
+async function restoreLibrary(): Promise<void> {
+  const saved = await loadAllBlobs();
+  if (!saved.length) return;
+  const files = saved.map(({ sop, blob }) => new File([blob], `${sop}.dcm`, { type: 'application/dicom' }));
+  await loadFiles(files, {
+    persist: false,
+    label: `Restoring ${saved.length} saved image${saved.length === 1 ? '' : 's'} from your local library…`,
+  });
+}
+
+/**
+ * Permanently delete everything in the local library (IndexedDB), then reload the
+ * page — the same clean-slate startup path a fresh launch takes, rather than
+ * hand-rolling viewport-clearing logic (Cornerstone's stack API isn't meant to be
+ * pointed at an empty array).
+ */
+async function clearLocalLibrary(): Promise<void> {
+  if (!confirm('Delete everything in your local library? This cannot be undone.')) return;
+  await clearLibrary();
+  location.reload();
+}
+
 // ---------- events ----------
 function wire(): void {
   fillIcons();
 
   $('#menu-open-files').addEventListener('click', () => fileInput.click());
   $('#menu-open-folder').addEventListener('click', () => folderInput.click());
+  $('#menu-clear-library').addEventListener('click', () => void clearLocalLibrary());
 
   const runExport = (label: string, task: () => Promise<void>) => {
     void task()
@@ -484,6 +514,7 @@ async function main(): Promise<void> {
     library.edited.set(sourceKey.split('?')[0], blob);
     const found = findInstanceByImageId(sourceKey);
     if (found) {
+      void saveBlob(found.instance.sop, blob); // write-through so the edit survives a reload
       void refreshSeriesSummary(found.series, blob).then(() => {
         renderSeriesList();
         refreshOverlays();
@@ -492,6 +523,8 @@ async function main(): Promise<void> {
   });
   fillPresets(null);
   wire();
+  void requestPersistence();
+  await restoreLibrary();
   refreshAll();
   setStatus('Ready');
   hideSplash();
