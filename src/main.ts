@@ -14,9 +14,10 @@ import {
   orderedSeries,
   refreshSeriesSummary,
   resolveInstanceBlob,
+  sopsForStudy,
 } from './ingest';
 import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
-import { clearLibrary, loadAllBlobs, requestPersistence, saveBlob } from './persist';
+import { clearLibrary, deleteBlobs, loadAllBlobs, requestPersistence, saveBlob } from './persist';
 import { CT_PRESETS } from './presets';
 import type { Series } from './types';
 
@@ -214,7 +215,16 @@ function renderSeriesList(): void {
       lastStudy = s.studyUid;
       const h = document.createElement('div');
       h.className = 'study-title';
-      h.textContent = [s.patientName, s.studyDescription, s.studyDate].filter(Boolean).join(' · ') || 'Study';
+      const label = document.createElement('span');
+      label.textContent = [s.patientName, s.studyDescription, s.studyDate].filter(Boolean).join(' · ') || 'Study';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'study-close';
+      close.title = 'Close this study (removes it from your local library)';
+      close.setAttribute('aria-label', `Close ${label.textContent}`);
+      close.textContent = '×';
+      close.addEventListener('click', () => void closeStudy(s.studyUid, label.textContent!));
+      h.append(label, close);
       seriesEl.append(h);
     }
     const btn = document.createElement('button');
@@ -371,6 +381,24 @@ async function restoreLibrary(): Promise<void> {
 async function clearLocalLibrary(): Promise<void> {
   if (!confirm('Delete everything in your local library? This cannot be undone.')) return;
   await clearLibrary();
+  location.reload();
+}
+
+/**
+ * Close one study (all its series) without touching any other study in the local
+ * library. Deletes just that study's blobs from IndexedDB, then reloads — the same
+ * reload-based clean slate as clearLocalLibrary(), just scoped to fewer SOPs, for the
+ * same reason: Cornerstone's StackViewport.setStack() isn't meant to be pointed at an
+ * empty array, so there's no safe way to hand-clear a cell that's showing one of the
+ * study's series in place. restoreLibrary() re-ingests whatever's left in IndexedDB on
+ * the next `main()` run, so every other study reappears exactly as it was; this one
+ * just doesn't.
+ */
+async function closeStudy(studyUid: string, label: string): Promise<void> {
+  const sops = sopsForStudy(studyUid);
+  if (!sops.length) return;
+  if (!confirm(`Close ${label}? It stays out of your local library until you re-import it.`)) return;
+  await deleteBlobs(sops);
   location.reload();
 }
 

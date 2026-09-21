@@ -37,7 +37,8 @@ slices, a JPG, a PNG and a 2-page PDF).
 
 - **Everything you import is saved in this browser**, so it's still there next time you open the app — you
   don't need to re-import your files every session. It never leaves your machine (same rule as everything else
-  here); Menu → Local library → **Clear local library** deletes it all if you want a clean slate.
+  here); Menu → Local library → **Clear local library** deletes it all if you want a clean slate, or click the
+  **×** on one study's header in the series list to close just that one and keep everything else loaded.
 - Open DICOM (uncompressed, RLE, JPEG, JPEG 2000, JPEG-LS), JPG, PNG, GIF, WebP, BMP, PDF and **.zip archives**
   of any of those (dropped or opened), including whole folders.
 - Series list with thumbnails, grouped by study; slices sorted by patient position, then instance number. Drag

@@ -303,6 +303,16 @@ export async function ingest(
   return report;
 }
 
+/** Every SOPInstanceUID belonging to a study — used to delete just that study's saved blobs. */
+export function sopsForStudy(studyUid: string): string[] {
+  const out = new Set<string>();
+  for (const series of library.series.values()) {
+    if (series.studyUid !== studyUid) continue;
+    for (const inst of series.instances) out.add(inst.sop);
+  }
+  return [...out];
+}
+
 /** Sorted view of the library for the series list. */
 export function orderedSeries(): Series[] {
   return [...library.series.values()].sort(

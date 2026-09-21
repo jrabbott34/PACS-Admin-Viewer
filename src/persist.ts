@@ -56,6 +56,19 @@ export async function loadAllBlobs(): Promise<{ sop: string; blob: Blob }[]> {
   });
 }
 
+/** Delete specific saved blobs by SOPInstanceUID (e.g. closing one study without wiping the rest). */
+export async function deleteBlobs(sops: string[]): Promise<void> {
+  if (!sops.length) return;
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    for (const sop of sops) store.delete(sop);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 /** Wipe the entire local library. */
 export async function clearLibrary(): Promise<void> {
   const db = await openDb();

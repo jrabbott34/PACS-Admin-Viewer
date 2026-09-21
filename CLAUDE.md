@@ -463,6 +463,34 @@ in a 2x2 layout with two cells independently zoomed away from 1.0×, "Reset all"
 loaded, enabled once any cell has a series, and one click puts both cells' zoom back to 1.0× in the same pass.
 The full pre-existing `tests/e2e/*.py` suite still passes.
 
+## Closing a single study
+A direct request: with several patients/exams loaded at once, close just one from the sidebar instead of the
+all-or-nothing Menu → Clear local library. A small "×" button (`.study-close`) sits on each study's header row
+in the series list (`renderSeriesList()` in `main.ts`), next to the patient/study/date label — study-level, not
+per-series, matching the request ("close that study"); a study with several series (DX+CT+MR sharing one
+StudyInstanceUID, same as the synthetic sample set) closes all of them together in one click.
+
+**Why this reloads the page instead of hand-clearing in place** (same reasoning as `clearLocalLibrary()`,
+scoped down): once a study's blob is gone, any cell currently showing one of its series would need to be reset
+to empty, and Cornerstone's `StackViewport.setStack()` still isn't meant to be pointed at an empty array (the
+gotcha behind `clearLocalLibrary()`'s reload and `swapCells()`'s never-leave-empty rule). There's no existing
+"unassign a cell" method in `LayoutManager` and building one just for this would mean being the first code path
+to test that constraint's edge, for a rarely-used action. `closeStudy(studyUid, label)` instead: confirms
+(`confirm()`, same destructive-action pattern as Clear local library), deletes just that study's blobs from
+IndexedDB via `deleteBlobs()` (new in `persist.ts` — `sops.forEach(store.delete)` inside one transaction, as
+opposed to `clearLibrary()`'s whole-store `.clear()`), then reloads. `restoreLibrary()` re-ingests whatever's
+left in IndexedDB on the next `main()` run exactly like a fresh launch, so every *other* study reappears intact
+— only the closed one doesn't come back. `sopsForStudy(studyUid)` (new in `ingest.ts`) collects the SOPs to
+delete; a multi-frame instance's frames all share one SOP (set per source blob, not per frame — see `register()`
+in `ingest.ts`), so the result is de-duplicated through a `Set` rather than the series' instances array directly.
+
+**Verified** (headless Chromium, persistent browser context so IndexedDB survives real reloads): closing a
+study with two series (DX+CT) removes both and the study group disappears from the list, confirmed again after
+a second, fully independent page navigation (not just the immediate post-close reload) — the deletion is
+actually persisted, not just reflected in stale in-memory state; with two distinct studies loaded, closing one
+leaves the other's series list entry and thumbnails completely intact; declining the confirm dialog leaves the
+series list unchanged. The full pre-existing `tests/e2e/*.py` suite still passes.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 
@@ -483,6 +511,25 @@ storage shows up — nothing so far has needed it.
 **Phase 4 — hanging protocols.** JSON schema: matching rules (modality, body part, laterality, series description,
 prior vs current), a layout, ordered display-set assignments, per-cell defaults (W/L, orientation). A builder that
 saves the current arrangement, and a matcher that picks the best protocol when a study loads.
+
+**Volume rendering (MIP, PET/CT-style fusion) — asked about, not started, and a materially bigger lift than
+anything else in this file so far.** Every cell today is a Cornerstone3D `StackViewport` (`Enums.ViewportType.STACK`
+in `layout.ts`) — a 2D image-by-image stack, which is the right fit for everything built so far but has no
+concept of a 3D volume to render through. MIP and fusion both need Cornerstone3D's *volume* pipeline instead:
+`cornerstoneStreamingImageVolumeLoader`/`cache.createVolume` to assemble a series' slices into one 3D volume
+(only meaningful for a series that's actually a coherent 3D stack — a NucMed/PET series with real geometry, not
+an arbitrary pile of 2D images), an `Enums.ViewportType.ORTHOGRAPHIC` or `VOLUME_3D` viewport with a MIP blend
+mode (`BlendModes.MAXIMUM_INTENSITY_BLEND`) for the MIP case, and for fusion, two volumes resampled onto the
+same grid with a second colormap layered via `viewport.setProperties()`/`addVolumesToViewport` (the actual
+"PET-hot-on-grayscale-CT" look) plus a registration/alignment step if the two series weren't already acquired
+in the same frame of reference. None of that exists in this codebase yet: no volume loader is wired up, `cs.ts`
+only initializes the stack/tools/loader trio, and `LayoutManager` assumes one `StackViewport` per cell
+throughout (`ViewportCell` is stack-shaped end to end — `setStack`, `getCurrentImageIdIndex`, etc.). This would
+be closer to a new phase than an incremental add: a volume-capable cell type alongside (not replacing) the
+stack cells, plus real handling of the PET/CT quantitative correction tags (`RescaleSlope`/`RescaleIntercept`,
+Philips/GE private SUV tags) if the output is meant to be clinically meaningful rather than just visually
+plausible. Worth doing if NucMed/PET-CT is a real, recurring need — not recommended as a quick add given how far
+it sits from the stack-viewport architecture everything else here is built on.
 
 ## Conventions
 Plain sentence-case UI copy; errors say what happened and how to fix it. The viewport stays true black on purpose.
