@@ -14,7 +14,17 @@ export function initCornerstone(): Promise<void> {
         useLegacyMetadataProvider: true,
       });
       tools.init();
-      for (const t of [tools.WindowLevelTool, tools.PanTool, tools.ZoomTool, tools.StackScrollTool]) {
+      for (const t of [
+        tools.WindowLevelTool,
+        tools.PanTool,
+        tools.ZoomTool,
+        tools.StackScrollTool,
+        tools.LengthTool,
+        tools.AngleTool,
+        tools.RectangleROITool,
+        tools.EllipticalROITool,
+        tools.ProbeTool,
+      ]) {
         tools.addTool(t);
       }
     })();

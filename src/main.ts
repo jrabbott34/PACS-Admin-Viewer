@@ -3,12 +3,14 @@ import { utilities as csUtils } from '@cornerstonejs/core';
 import { wadouri } from '@cornerstonejs/dicom-image-loader';
 import { initCornerstone } from './cs';
 import { HeaderPanel } from './header';
-import { entriesFromDataTransfer, filesFromEntries, ingest, orderedSeries } from './ingest';
+import { entriesFromDataTransfer, filesFromEntries, ingest, library, orderedSeries } from './ingest';
+import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
+import { CT_PRESETS } from './presets';
 import type { Series } from './types';
-import { CT_PRESETS, type PrimaryTool, Viewer } from './viewer';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
+const gridEl = $<HTMLDivElement>('#viewport-grid');
 const seriesEl = $('#series');
 const statusEl = $('#status');
 const emptyEl = $('#empty');
@@ -19,10 +21,12 @@ const wcEl = $<HTMLInputElement>('#wc');
 const headerBtn = $<HTMLButtonElement>('#btn-header');
 const fileInput = $<HTMLInputElement>('#file-input');
 const folderInput = $<HTMLInputElement>('#folder-input');
+const linkScrollBtn = $<HTMLButtonElement>('#btn-link-scroll');
+const layoutGroupEl = $('#layout-group');
 
-let viewer: Viewer;
+let layout: LayoutManager;
 let header: HeaderPanel;
-let currentSeries: Series | null = null;
+let lastPresetSeries: Series | null = null;
 const thumbQueue: (() => Promise<void>)[] = [];
 let thumbRunning = false;
 
@@ -31,61 +35,74 @@ function setStatus(msg: string, title = ''): void {
   statusEl.title = title;
 }
 
-// ---------- overlay ----------
-function fmtDate(s: string): string {
-  return s;
-}
-
-function refreshOverlay(): void {
-  const s = currentSeries;
-  const set = (cls: string, lines: (string | false | undefined)[]) => {
-    $(`.ov.${cls}`).textContent = lines.filter(Boolean).join('\n');
-  };
-  if (!s) {
-    for (const c of ['tl', 'tr', 'bl', 'br']) set(c, []);
-    return;
+// ---------- overlays (one set of four corners per visible cell) ----------
+function refreshOverlays(): void {
+  for (const { cell, overlay } of layout.visibleEntries()) {
+    const s = cell.series;
+    const set = (cls: 'tl' | 'tr' | 'bl' | 'br', lines: (string | false | undefined)[]) => {
+      overlay[cls].textContent = lines.filter(Boolean).join('\n');
+    };
+    if (!s) {
+      set('tl', []);
+      set('tr', []);
+      set('bl', []);
+      set('br', []);
+      continue;
+    }
+    const st = cell.state;
+    const inst = s.instances[st.index];
+    const imported = s.kind !== 'dicom';
+    set('tl', [
+      imported ? s.seriesDescription : s.patientName,
+      !imported && s.patientId,
+      s.studyDate,
+      !imported && s.studyDescription,
+    ]);
+    set('tr', [
+      !imported && s.seriesDescription,
+      !imported && s.institution,
+      imported && (s.kind === 'pdf' ? 'PDF' : 'Image'),
+    ]);
+    set('bl', [
+      `${s.kind === 'pdf' ? 'Page' : 'Image'} ${st.index + 1} / ${st.total}`,
+      inst?.sliceLocation !== undefined && `Loc ${inst.sliceLocation.toFixed(1)} mm`,
+      inst?.thickness !== undefined && `Thk ${inst.thickness.toFixed(1)} mm`,
+    ]);
+    set('br', [
+      !s.isColor && st.windowWidth !== undefined && `W ${Math.round(st.windowWidth)}  L ${Math.round(st.windowCenter!)}`,
+      `Zoom ${st.zoom.toFixed(2)}×`,
+      st.invert && 'Inverted',
+    ]);
   }
-  const st = viewer.state;
-  const inst = s.instances[st.index];
-  const imported = s.kind !== 'dicom';
-  set('tl', [
-    imported ? s.seriesDescription : s.patientName,
-    !imported && s.patientId,
-    fmtDate(s.studyDate),
-    !imported && s.studyDescription,
-  ]);
-  set('tr', [
-    !imported && s.seriesDescription,
-    !imported && s.institution,
-    imported && (s.kind === 'pdf' ? 'PDF' : 'Image'),
-  ]);
-  set('bl', [
-    `${s.kind === 'pdf' ? 'Page' : 'Image'} ${st.index + 1} / ${st.total}`,
-    inst?.sliceLocation !== undefined && `Loc ${inst.sliceLocation.toFixed(1)} mm`,
-    inst?.thickness !== undefined && `Thk ${inst.thickness.toFixed(1)} mm`,
-  ]);
-  set('br', [
-    !s.isColor && st.windowWidth !== undefined && `W ${Math.round(st.windowWidth)}  L ${Math.round(st.windowCenter!)}`,
-    `Zoom ${st.zoom.toFixed(2)}×`,
-    st.invert && 'Inverted',
-  ]);
 }
 
 // ---------- toolbar state ----------
 function refreshToolbar(): void {
-  const st = viewer.state;
-  const color = !!currentSeries?.isColor;
-  const none = !currentSeries;
+  const activeSeries = layout.activeCell.series;
+  if (activeSeries !== lastPresetSeries) {
+    fillPresets(activeSeries);
+    lastPresetSeries = activeSeries;
+  }
+  const st = layout.activeCell.state;
+  const color = !!activeSeries?.isColor;
+  const none = !activeSeries;
   wwEl.disabled = wcEl.disabled = presetEl.disabled = color || none;
   $('#btn-invert').setAttribute('aria-pressed', String(st.invert));
   $('#btn-flip-h').setAttribute('aria-pressed', String(st.flipH));
   $('#btn-flip-v').setAttribute('aria-pressed', String(st.flipV));
+  linkScrollBtn.setAttribute('aria-pressed', String(layout.linkScroll));
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
-    b.classList.toggle('active', b.dataset.tool === viewer.primaryTool);
+    b.classList.toggle('active', b.dataset.tool === layout.primaryTool);
     b.setAttribute('role', 'radio');
-    b.setAttribute('aria-checked', String(b.dataset.tool === viewer.primaryTool));
+    b.setAttribute('aria-checked', String(b.dataset.tool === layout.primaryTool));
   }
-  for (const id of ['#btn-invert', '#btn-flip-h', '#btn-flip-v', '#btn-rotate', '#btn-reset']) {
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-layout]')) {
+    const [r, c] = b.dataset.layout!.split('x').map(Number);
+    const on = r === layout.layoutRows && c === layout.layoutCols;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+  for (const id of ['#btn-invert', '#btn-flip-h', '#btn-flip-v', '#btn-rotate', '#btn-reset', '#btn-clear-meas']) {
     ($(id) as HTMLButtonElement).disabled = none;
   }
   if (!color && st.windowWidth !== undefined) {
@@ -136,7 +153,8 @@ function renderSeriesList(): void {
     btn.type = 'button';
     btn.className = 'series-item';
     btn.dataset.uid = s.uid;
-    btn.setAttribute('aria-current', String(s === currentSeries));
+    btn.draggable = true;
+    btn.setAttribute('aria-current', String(s === layout.activeCell.series));
     const fallback = document.createElement('div');
     fallback.className = 'thumb-fallback';
     fallback.textContent = s.modality || '—';
@@ -151,15 +169,20 @@ function renderSeriesList(): void {
     sub.textContent = `${s.kind === 'pdf' ? 'PDF' : s.kind === 'image' ? 'Image' : s.modality || 'Series'} · ${n} ${s.kind === 'pdf' ? 'page' : 'image'}${n === 1 ? '' : 's'}`;
     text.append(label, sub);
     btn.append(fallback, text);
-    btn.addEventListener('click', () => void openSeries(s));
+    btn.addEventListener('click', () => void pickSeries(s));
+    btn.addEventListener('dragstart', (e) => {
+      e.dataTransfer?.setData('text/x-series-uid', s.uid);
+      e.dataTransfer!.effectAllowed = 'copy';
+    });
     seriesEl.append(btn);
     queueThumbnail(s, btn, fallback);
   }
 }
 
 function markCurrentSeries(): void {
+  const current = layout.activeCell.series;
   for (const b of seriesEl.querySelectorAll<HTMLButtonElement>('.series-item')) {
-    b.setAttribute('aria-current', String(b.dataset.uid === currentSeries?.uid));
+    b.setAttribute('aria-current', String(b.dataset.uid === current?.uid));
   }
 }
 
@@ -196,13 +219,9 @@ async function runThumbs(): Promise<void> {
   thumbRunning = false;
 }
 
-// ---------- opening series ----------
-async function openSeries(s: Series, index = 0): Promise<void> {
-  currentSeries = s;
-  emptyEl.hidden = true;
-  fillPresets(s);
-  await viewer.load(s, index);
-  markCurrentSeries();
+// ---------- opening series into the active cell ----------
+async function pickSeries(s: Series, index = 0): Promise<void> {
+  await layout.assign(layout.activeIndex, s, index);
   refreshAll();
   setStatus(`${s.seriesDescription || s.modality} — ${s.instances.length} ${s.instances.length === 1 ? 'image' : 'images'}`);
 }
@@ -218,13 +237,14 @@ function refreshHeader(): void {
   if (!header.visible) return;
   window.clearTimeout(headerTimer);
   headerTimer = window.setTimeout(() => {
-    const id = viewer.currentImageId;
+    const id = layout.activeCell.currentImageId;
     void header.show(blobForImageId(id), id ?? '');
   }, 80);
 }
 
 function refreshAll(): void {
-  refreshOverlay();
+  markCurrentSeries();
+  refreshOverlays();
   refreshToolbar();
   refreshHeader();
 }
@@ -237,6 +257,7 @@ async function loadFiles(files: File[]): Promise<void> {
     if (done % 8 === 0 || done === total) setStatus(`Reading files… ${done} / ${total}`);
   });
   renderSeriesList();
+  if (report.touched.length) emptyEl.hidden = true;
 
   const parts: string[] = [];
   if (report.instancesAdded) {
@@ -250,11 +271,11 @@ async function loadFiles(files: File[]): Promise<void> {
     .join('\n');
   setStatus(parts.join(' · ') || 'Nothing to load', detail);
 
-  // Open the first new series if nothing is showing yet.
-  if (!currentSeries && report.touched.length) {
+  // Open the first new series into the active cell if it's still empty.
+  if (!layout.activeCell.series && report.touched.length) {
     const first = orderedSeries().find((s) => report.touched.includes(s));
-    if (first) await openSeries(first);
-  } else if (currentSeries) {
+    if (first) await pickSeries(first);
+  } else {
     markCurrentSeries();
   }
 }
@@ -272,7 +293,18 @@ function wire(): void {
   }
 
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
-    b.addEventListener('click', () => viewer.setPrimaryTool(b.dataset.tool as PrimaryTool));
+    b.addEventListener('click', () => layout.setPrimaryTool(b.dataset.tool as PrimaryTool));
+  }
+
+  for (const p of LAYOUT_PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.layout = `${p.rows}x${p.cols}`;
+    b.textContent = p.label;
+    b.title = `${p.label} layout`;
+    b.setAttribute('role', 'radio');
+    b.addEventListener('click', () => layout.setLayout(p.rows, p.cols));
+    layoutGroupEl.append(b);
   }
 
   const applyTyped = () => {
@@ -280,32 +312,37 @@ function wire(): void {
     const c = Number(wcEl.value);
     if (Number.isFinite(w) && Number.isFinite(c) && w > 0) {
       presetEl.value = 'custom';
-      viewer.setWindow(w, c);
+      layout.activeCell.setWindow(w, c);
     }
   };
   wwEl.addEventListener('change', applyTyped);
   wcEl.addEventListener('change', applyTyped);
   presetEl.addEventListener('change', () => {
     const v = presetEl.value;
-    if (v === 'default') viewer.defaultWindow();
-    else if (v === 'auto') viewer.autoWindow();
+    if (v === 'default') layout.activeCell.defaultWindow();
+    else if (v === 'auto') layout.activeCell.autoWindow();
     else if (v.startsWith('ct:')) {
       const p = CT_PRESETS[Number(v.slice(3))];
-      viewer.setWindow(p.width, p.center);
+      layout.activeCell.setWindow(p.width, p.center);
     }
   });
 
-  $('#btn-invert').addEventListener('click', () => viewer.toggleInvert());
-  $('#btn-flip-h').addEventListener('click', () => viewer.flip('h'));
-  $('#btn-flip-v').addEventListener('click', () => viewer.flip('v'));
-  $('#btn-rotate').addEventListener('click', () => viewer.rotate(90));
+  $('#btn-invert').addEventListener('click', () => layout.activeCell.toggleInvert());
+  $('#btn-flip-h').addEventListener('click', () => layout.activeCell.flip('h'));
+  $('#btn-flip-v').addEventListener('click', () => layout.activeCell.flip('v'));
+  $('#btn-rotate').addEventListener('click', () => layout.activeCell.rotate(90));
   $('#btn-reset').addEventListener('click', () => {
     presetEl.value = 'default';
-    void viewer.resetView();
+    void layout.activeCell.resetView();
+  });
+  $('#btn-clear-meas').addEventListener('click', () => layout.clearMeasurements());
+  linkScrollBtn.addEventListener('click', () => {
+    layout.linkScroll = !layout.linkScroll;
+    linkScrollBtn.setAttribute('aria-pressed', String(layout.linkScroll));
   });
   headerBtn.addEventListener('click', toggleHeader);
 
-  viewer.onChange(refreshAll);
+  layout.onChange(refreshAll);
 
   // drag and drop (folders included)
   let dragDepth = 0;
@@ -323,6 +360,8 @@ function wire(): void {
     if (!dragDepth) dropVeil.hidden = true;
   });
   window.addEventListener('drop', (e) => {
+    // A drop of a series-list item onto a cell is handled by the cell itself.
+    if (e.dataTransfer?.types.includes('text/x-series-uid')) return;
     e.preventDefault();
     dragDepth = 0;
     dropVeil.hidden = true;
@@ -340,15 +379,15 @@ function wire(): void {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
     let handled = true;
-    if (k === 'ArrowUp' || k === 'ArrowLeft' || k === 'PageUp') void viewer.step(-1);
-    else if (k === 'ArrowDown' || k === 'ArrowRight' || k === 'PageDown') void viewer.step(1);
-    else if (k === 'Home') void viewer.goTo(0);
-    else if (k === 'End') void viewer.goTo(Number.MAX_SAFE_INTEGER);
-    else if (k === 's' || k === 'S') viewer.setPrimaryTool('scroll');
-    else if (k === 'w' || k === 'W') viewer.setPrimaryTool('wl');
-    else if (k === 'p' || k === 'P') viewer.setPrimaryTool('pan');
-    else if (k === 'z' || k === 'Z') viewer.setPrimaryTool('zoom');
-    else if (k === 'i' || k === 'I') viewer.toggleInvert();
+    if (k === 'ArrowUp' || k === 'ArrowLeft' || k === 'PageUp') void layout.activeCell.step(-1);
+    else if (k === 'ArrowDown' || k === 'ArrowRight' || k === 'PageDown') void layout.activeCell.step(1);
+    else if (k === 'Home') void layout.activeCell.goTo(0);
+    else if (k === 'End') void layout.activeCell.goTo(Number.MAX_SAFE_INTEGER);
+    else if (k === 's' || k === 'S') layout.setPrimaryTool('scroll');
+    else if (k === 'w' || k === 'W') layout.setPrimaryTool('wl');
+    else if (k === 'p' || k === 'P') layout.setPrimaryTool('pan');
+    else if (k === 'z' || k === 'Z') layout.setPrimaryTool('zoom');
+    else if (k === 'i' || k === 'I') layout.activeCell.toggleInvert();
     else if (k === 'r' || k === 'R') $('#btn-reset').click();
     else if (k === 'h' || k === 'H') toggleHeader();
     else handled = false;
@@ -361,7 +400,7 @@ function toggleHeader(): void {
   header.setVisible(on);
   headerBtn.setAttribute('aria-pressed', String(on));
   if (on) {
-    const id = viewer.currentImageId;
+    const id = layout.activeCell.currentImageId;
     void header.show(blobForImageId(id), id ?? '');
   }
 }
@@ -369,14 +408,14 @@ function toggleHeader(): void {
 async function main(): Promise<void> {
   setStatus('Starting…');
   await initCornerstone();
-  viewer = new Viewer($<HTMLDivElement>('#viewport'));
+  layout = new LayoutManager(gridEl, (uid) => library.series.get(uid));
   header = new HeaderPanel($('#header-panel'));
   fillPresets(null);
   wire();
   refreshAll();
   setStatus('Ready');
   // Test hook for automated checks.
-  (window as unknown as { __viewer: Viewer }).__viewer = viewer;
+  (window as unknown as { __viewer: LayoutManager }).__viewer = layout;
 }
 
 main().catch((e) => {

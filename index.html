@@ -14,11 +14,18 @@
           <button id="open-folder" type="button">Open folder</button>
         </div>
 
+        <div id="layout-group" class="group segmented" role="radiogroup" aria-label="Viewport layout"></div>
+
         <div class="group segmented" role="radiogroup" aria-label="Left mouse button tool">
           <button type="button" data-tool="scroll" title="Scroll (S) — drag to move through the stack">Scroll</button>
           <button type="button" data-tool="wl" title="Window/Level (W) — drag to adjust">Window/Level</button>
           <button type="button" data-tool="pan" title="Pan (P)">Pan</button>
           <button type="button" data-tool="zoom" title="Zoom (Z)">Zoom</button>
+          <button type="button" data-tool="length" title="Length">Length</button>
+          <button type="button" data-tool="angle" title="Angle">Angle</button>
+          <button type="button" data-tool="rectangleroi" title="Rectangle ROI">Rect ROI</button>
+          <button type="button" data-tool="ellipticalroi" title="Ellipse ROI">Ellipse ROI</button>
+          <button type="button" data-tool="probe" title="Probe — pixel value at a point">Probe</button>
         </div>
 
         <div class="group wl">
@@ -33,6 +40,8 @@
           <button id="btn-flip-v" type="button" title="Flip vertically">Flip V</button>
           <button id="btn-rotate" type="button" title="Rotate 90° clockwise">Rotate</button>
           <button id="btn-reset" type="button" title="Reset view (R)">Reset</button>
+          <button id="btn-clear-meas" type="button" title="Remove all measurements from the active viewport">Clear</button>
+          <button id="btn-link-scroll" type="button" aria-pressed="false" title="Scroll all viewports together">Link scroll</button>
         </div>
 
         <div class="group push">
@@ -43,10 +52,7 @@
       <aside id="series" class="series" aria-label="Series"></aside>
 
       <main class="stage">
-        <div id="viewport" class="viewport"></div>
-        <div id="overlay" class="overlay" aria-hidden="true">
-          <div class="ov tl"></div><div class="ov tr"></div><div class="ov bl"></div><div class="ov br"></div>
-        </div>
+        <div id="viewport-grid" class="viewport-grid"></div>
         <div id="empty" class="empty">
           <h1>No images loaded</h1>
           <p>Drop DICOM files, folders, JPG/PNG images or PDFs anywhere in this window, or use Open.</p>

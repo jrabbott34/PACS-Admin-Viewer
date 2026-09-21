@@ -1,20 +1,6 @@
-import { Enums, RenderingEngine, cache, utilities as csUtils } from '@cornerstonejs/core';
+import { cache, utilities as csUtils } from '@cornerstonejs/core';
 import type { Types } from '@cornerstonejs/core';
-import * as tools from '@cornerstonejs/tools';
 import type { Series } from './types';
-
-export type PrimaryTool = 'scroll' | 'wl' | 'pan' | 'zoom';
-
-const ENGINE_ID = 'viewer-engine';
-const VIEWPORT_ID = 'main';
-const TOOLGROUP_ID = 'main-tools';
-
-const TOOL_NAMES: Record<PrimaryTool, string> = {
-  scroll: tools.StackScrollTool.toolName,
-  wl: tools.WindowLevelTool.toolName,
-  pan: tools.PanTool.toolName,
-  zoom: tools.ZoomTool.toolName,
-};
 
 export interface ViewState {
   index: number;
@@ -28,107 +14,19 @@ export interface ViewState {
   rotation: number;
 }
 
-export interface WindowPreset {
-  label: string;
-  width: number;
-  center: number;
-}
-
-/** Common CT presets (Hounsfield units). */
-export const CT_PRESETS: WindowPreset[] = [
-  { label: 'Brain', width: 80, center: 40 },
-  { label: 'Subdural', width: 300, center: 100 },
-  { label: 'Stroke', width: 40, center: 40 },
-  { label: 'Soft tissue', width: 400, center: 40 },
-  { label: 'Liver', width: 150, center: 60 },
-  { label: 'Mediastinum', width: 350, center: 50 },
-  { label: 'Lung', width: 1500, center: -600 },
-  { label: 'Bone', width: 2000, center: 500 },
-];
-
-export class Viewer {
-  readonly element: HTMLDivElement;
-  private engine: RenderingEngine;
-  private viewport: Types.IStackViewport;
-  private toolGroup: NonNullable<ReturnType<typeof tools.ToolGroupManager.createToolGroup>>;
-  private primary: PrimaryTool = 'wl';
+/**
+ * One stack viewport's worth of state (load, scroll, W/L, presentation).
+ * Owned and positioned by a LayoutManager, which also owns the shared tool group.
+ */
+export class ViewportCell {
+  series: Series | null = null;
   /** Invert flag Cornerstone applies by default (true for MONOCHROME1). */
   private baseInvert = false;
-  private listeners = new Set<() => void>();
-  private pending = 0;
-  series: Series | null = null;
 
-  constructor(element: HTMLDivElement) {
-    this.element = element;
-    element.addEventListener('contextmenu', (e) => e.preventDefault());
-
-    this.engine = new RenderingEngine(ENGINE_ID);
-    this.engine.enableElement({
-      viewportId: VIEWPORT_ID,
-      type: Enums.ViewportType.STACK,
-      element,
-      defaultOptions: { background: [0, 0, 0] },
-    });
-    this.viewport = this.engine.getViewport(VIEWPORT_ID) as Types.IStackViewport;
-
-    const tg = tools.ToolGroupManager.createToolGroup(TOOLGROUP_ID)!;
-    for (const name of Object.values(TOOL_NAMES)) tg.addTool(name);
-    tg.addViewport(VIEWPORT_ID, ENGINE_ID);
-    this.toolGroup = tg;
-    this.applyBindings();
-
-    for (const ev of [
-      Enums.Events.STACK_NEW_IMAGE,
-      Enums.Events.VOI_MODIFIED,
-      Enums.Events.CAMERA_MODIFIED,
-    ]) {
-      element.addEventListener(ev, () => this.scheduleEmit());
-    }
-
-    new ResizeObserver(() => {
-      this.engine.resize(true, false);
-    }).observe(element);
-  }
-
-  // ---- change notification (throttled to one callback per frame) ----
-  onChange(cb: () => void): void {
-    this.listeners.add(cb);
-  }
-  private scheduleEmit(): void {
-    if (this.pending) return;
-    this.pending = requestAnimationFrame(() => {
-      this.pending = 0;
-      this.listeners.forEach((cb) => cb());
-    });
-  }
-
-  // ---- tools ----
-  get primaryTool(): PrimaryTool {
-    return this.primary;
-  }
-
-  setPrimaryTool(tool: PrimaryTool): void {
-    this.primary = tool;
-    this.applyBindings();
-    this.scheduleEmit();
-  }
-
-  private applyBindings(): void {
-    const { MouseBindings } = tools.Enums;
-    // Fixed secondary bindings: middle = pan, right = zoom, wheel = scroll.
-    const bindings: Record<PrimaryTool, { mouseButton: number }[]> = {
-      wl: [],
-      pan: [{ mouseButton: MouseBindings.Auxiliary }],
-      zoom: [{ mouseButton: MouseBindings.Secondary }],
-      scroll: [{ mouseButton: MouseBindings.Wheel }],
-    };
-    bindings[this.primary].push({ mouseButton: MouseBindings.Primary });
-    for (const key of Object.keys(TOOL_NAMES) as PrimaryTool[]) {
-      const b = bindings[key];
-      if (b.length) this.toolGroup.setToolActive(TOOL_NAMES[key], { bindings: b });
-      else this.toolGroup.setToolPassive(TOOL_NAMES[key]);
-    }
-  }
+  constructor(
+    readonly viewportId: string,
+    private readonly viewport: Types.IStackViewport,
+  ) {}
 
   // ---- series / stack ----
   async load(series: Series, index = 0): Promise<void> {
@@ -138,7 +36,6 @@ export class Viewer {
     this.viewport.resetCamera();
     this.baseInvert = !!this.viewport.getProperties().invert;
     this.viewport.render();
-    this.scheduleEmit();
   }
 
   get currentImageId(): string | undefined {
@@ -240,9 +137,5 @@ export class Viewer {
       flipV: !!pres.flipVertical,
       rotation: pres.rotation ?? 0,
     };
-  }
-
-  destroy(): void {
-    this.engine.destroy();
   }
 }

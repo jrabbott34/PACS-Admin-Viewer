@@ -16,9 +16,11 @@ pdfjs-dist 6 (**legacy build**). Plain DOM/CSS, no UI framework.
 | `src/cs.ts` | One-time init of Cornerstone, tools and the DICOM loader |
 | `src/ingest.ts` | Sniffs files, parses headers (dicom-parser), groups into series, sorts slices, folder drop helpers |
 | `src/wrap.ts` | JPG/PNG/etc. and PDF pages -> in-memory DICOM Secondary Capture (via dcmjs) |
-| `src/viewer.ts` | `Viewer` class: one StackViewport + tool group, W/L, presets, invert/flip/rotate, reset |
+| `src/presets.ts` | `CT_PRESETS` window/level presets (shared data, no Cornerstone dependency) |
+| `src/viewport-cell.ts` | `ViewportCell`: one stack viewport's load/scroll/W-L/presentation state |
+| `src/layout.ts` | `LayoutManager`: shared RenderingEngine + one global ToolGroup, the grid of cells, active-cell tracking, layout presets, link-scroll, measurement-tool clearing |
 | `src/header.ts` | dcmjs-based tag reader and the searchable header panel |
-| `src/main.ts` | DOM wiring: toolbar, series list, thumbnails, overlays, drag/drop, shortcuts |
+| `src/main.ts` | DOM wiring: toolbar, series list, thumbnails, per-cell overlays, drag/drop, shortcuts |
 | `src/types.ts` | `Series`, `InstanceInfo`, `IngestReport` |
 | `samples/` | Synthetic test data + `generate_samples.py` (needs pydicom, numpy, pillow, reportlab) |
 | `tests/e2e/` | Headless Playwright (Python) checks; run from `samples/` |
@@ -29,6 +31,36 @@ Every input becomes DICOM. Files are registered with `wadouri.fileManager.add(bl
 Secondary Capture blobs, so the viewport, series list and header panel treat them like any other DICOM.
 Grayscale JPG/PNG/PDF pages are stored as MONOCHROME2 (so W/L works); colour ones as RGB (W/L disabled).
 The library (`library` in `ingest.ts`) is keyed by SeriesInstanceUID and de-duplicates by SOPInstanceUID.
+
+## Layouts and the active cell (phase 2)
+`LayoutManager` owns one `RenderingEngine` and one shared `ToolGroup` covering every cell's viewport. Tool
+selection (the left-mouse-button tool, including the five measurement tools) is **global** — it applies to
+whichever viewport you interact with next, matching how multi-viewport PACS viewers usually behave. Window/level,
+invert, flip, rotation and the current slice are **per cell** (`ViewportCell` state).
+
+Cells are created lazily up to a 3x3 ceiling (`MAX_CELLS`) and never destroyed when the layout shrinks — they're
+just hidden (`wrapper.hidden`). This means flipping between, say, 1x1 and 2x2 never loses what was loaded into a
+cell that persists across both layouts. `LayoutManager.setLayout(rows, cols)` only changes the CSS grid template
+and which cells are visible.
+
+The **active cell** (`layout.activeIndex` / `layout.activeCell`) is whichever cell was last clicked (`mousedown`
+on the cell wrapper). Toolbar actions that only make sense for one viewport — W/L typed values and presets,
+invert, flip, rotate, reset, "Clear" measurements, the header panel — act on the active cell. Clicking a series
+list item loads it into the active cell; dragging a series list item (`draggable`, `dataset.uid`, custom
+`text/x-series-uid` MIME type) onto any cell assigns it to that specific cell directly, bypassing "active cell"
+entirely, and also makes that cell active.
+
+**Link scroll**: when `layout.linkScroll` is on, a `STACK_NEW_IMAGE` event on any cell broadcasts the same
+(clamped) image index to every other cell that has a series loaded. A `syncing` re-entrancy guard stops this
+from cascading into an infinite loop across cells.
+
+**Measurement tools**: Length, Angle, Rectangle ROI, Ellipse ROI, Probe, added globally in `cs.ts` and to the
+shared tool group in `layout.ts`. They use whatever pixel-spacing calibration Cornerstone finds on the image
+(real DICOM's PixelSpacing, falling back to pixels for wrapped JPG/PNG which have none — untested which message
+Cornerstone shows for that fallback, see NOT verified below). `LayoutManager.clearMeasurements(index)` removes
+all annotations for one cell via `tools.annotation.state.removeAnnotations(toolName, element)` per tool name,
+then calls `tools.utilities.triggerAnnotationRender(element)` — removal alone does not force the SVG annotation
+layer to redraw.
 
 ## Hard-won gotchas — read before changing anything here
 1. **`useLegacyMetadataProvider: true` in `cs.ts` is required.** With Cornerstone v5's default "naturalized metadata"
@@ -53,17 +85,26 @@ Dev and production builds; CT/MR/DX series, sorting, scroll (wheel, drag, keys);
 zoom, pan, flip, rotate, invert, reset; MONOCHROME1 rendering; RLE, JPEG 2000 and JPEG-LS decode pixel-identical to
 uncompressed; JPG, PNG and PDF import; header panel and filter; thumbnails; zero console errors.
 
+Phase 2, headless Chromium: 2x2 layout with three different series (DX/CT/MR) loaded into three cells
+simultaneously; click-to-activate a cell; click a series list item to load into the active cell; drag a series
+onto a specific cell (synthetic HTML5 `drop` dispatch — see below); Length tool draws a correctly-calibrated line
+("130 mm", matching the synthetic phantom's known pixel spacing); "Clear" removes the annotation's SVG text node;
+link scroll propagates a `goTo()` on one cell to another cell showing the same series; zero console errors
+throughout.
+
+**Not verified**: real mouse-drag HTML5 drag-and-drop (Playwright's synthetic `mousedown`/`mousemove`/`mouseup`
+does not trigger native `dragstart`; the test dispatches a `DragEvent('drop', { dataTransfer })` directly instead
+— exercises the same drop handler, but not real OS-level drag gesture recognition), Angle/Rectangle ROI/Ellipse
+ROI/Probe individually (only Length was drawn), calibration fallback for wrapped JPG/PNG (no PixelSpacing tag),
+3x3 layout, resizing a cell after measurements exist, more than 2 series linked by scroll at once.
+
 ## NOT verified
 Real GPU rendering, Firefox/Safari, studies of 500+ slices (memory, load time), native colour DICOM (RGB/YBR/palette),
 multi-frame and enhanced CT/MR (code path exists, no test file), JPEG lossy and HTJ2K, DICOMDIR, very large PDFs
 (capped at 100 pages), layout on narrow screens (series list is simply hidden below 820px).
 
 ## Roadmap
-**Phase 2 — layouts and measurements.** Refactor `Viewer` into a `ViewportCell` plus a `LayoutManager`
-(1x1, 1x2, 2x1, 2x2, 3x3, ...). Cells bind to a "display set" (a series, or a single image), so a cell can show either.
-Drag a series from the list into a cell; synchronised scrolling as an option. Measurement tools: Length, Angle,
-Rectangle/Ellipse ROI, Probe. Use PixelSpacing (fall back to ImagerPixelSpacing); wrapped images have no spacing,
-so report pixels for them.
+**Phase 2 — layouts and measurements. Done**, see above.
 
 **Phase 3 — import/export and header editing.** Import zips and DICOMDIR. Export DICOM, PNG/JPG (with or without burned-in
 annotations) and zip. Header editing behind an explicit admin mode: log every change (tag, old, new, timestamp), an

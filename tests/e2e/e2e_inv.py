@@ -16,9 +16,9 @@ with sync_playwright() as p:
     pg.wait_for_timeout(1500)
     # background of body (outside chest ellipse) near top-left of image; spine at center
     bg, spine = (470, 130), (838, 430)
-    print("initial   user-invert:", pg.evaluate("window.__viewer.state.invert"), "bg", px(pg,*bg), "spine", px(pg,*spine))
+    print("initial   user-invert:", pg.evaluate("window.__viewer.activeCell.state.invert"), "bg", px(pg,*bg), "spine", px(pg,*spine))
     pg.click("#btn-invert"); pg.wait_for_timeout(600)
-    print("toggled   user-invert:", pg.evaluate("window.__viewer.state.invert"), "bg", px(pg,*bg), "spine", px(pg,*spine))
+    print("toggled   user-invert:", pg.evaluate("window.__viewer.activeCell.state.invert"), "bg", px(pg,*bg), "spine", px(pg,*spine))
     pg.click("#btn-reset"); pg.wait_for_timeout(600)
-    print("reset     user-invert:", pg.evaluate("window.__viewer.state.invert"), "bg", px(pg,*bg), "spine", px(pg,*spine))
+    print("reset     user-invert:", pg.evaluate("window.__viewer.activeCell.state.invert"), "bg", px(pg,*bg), "spine", px(pg,*spine))
     b.close()
