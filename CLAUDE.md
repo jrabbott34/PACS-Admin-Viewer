@@ -19,7 +19,8 @@ pdfjs-dist 6 (**legacy build**). Plain DOM/CSS, no UI framework.
 | `src/presets.ts` | `CT_PRESETS` window/level presets (shared data, no Cornerstone dependency) |
 | `src/viewport-cell.ts` | `ViewportCell`: one stack viewport's load/scroll/W-L/presentation state |
 | `src/layout.ts` | `LayoutManager`: shared RenderingEngine + one global ToolGroup, the grid of cells, active-cell tracking, layout presets, link-scroll, measurement-tool clearing |
-| `src/header.ts` | dcmjs-based tag reader and the searchable header panel |
+| `src/header.ts` | dcmjs-based tag reader/editor: the searchable header panel, admin edit mode, change log, regenerate-UID |
+| `src/export.ts` | Export DICOM (zip), export the active cell's frame as PNG/JPG, anonymize-and-export a series |
 | `src/icons.ts` | Hand-authored inline SVG icon set (no CDN); `icon()`, `layoutIcon()` (draws an actual rows x cols grid), `fillIcons()` |
 | `src/flyout.ts` | `createFlyout(trigger, panel)`: generic "explode down" popover (menu, layout picker, tool picker) |
 | `src/main.ts` | DOM wiring: toolbar, flyouts, series list, thumbnails, per-cell overlays, drag/drop, shortcuts |
@@ -99,6 +100,70 @@ regression from the reskin. **Not verified**: real mouse hover/focus states, nar
 toolbar groups, screen reader behavior of the flyouts (aria-hidden/aria-expanded are set, but not tested with
 an actual AT).
 
+## Import/export and header editing (phase 3)
+
+**Import**: `ingest()` (`ingest.ts`) now calls `expandArchives(files)` first. Any `.zip` (sniffed by extension or
+`PK` magic bytes, not just extension) is unzipped in-browser with `fflate`'s `unzipSync` and its entries spliced
+back into the file list — recursively, so a zip inside a zip works too. `__MACOSX/` junk and `._*` AppleDouble
+files are filtered out. **DICOMDIR is not specially parsed** — a DICOMDIR file itself has no pixel data, so it's
+just reported as skipped, same as any other non-image file; every DICOM file *loose in the same archive* still
+gets read from its own header exactly like a normal folder drop, so the net result is correct even without
+walking the DICOMDIR directory-record tree. This was a deliberate scope cut, not an oversight: DICOMDIR parsing
+would only change ordering/efficiency, not correctness, given `ingest()` already derives series/study structure
+per-file.
+
+**Export** (`export.ts`), all from the Menu, all scoped to the **active cell's series**:
+- `exportSeriesDicomZip`: zips every instance's current blob (original, or header-edited if one exists — see
+  below) and downloads it, no re-encoding.
+- `exportCellImage`: composites the active cell's rendered pixel canvas (`ViewportCell.getCanvas()`) with the
+  Cornerstone annotation SVG layer (`cell.element.querySelector('svg.svg-layer')`, cloned, serialized, drawn via
+  an `Image` onto an offscreen canvas) and downloads a PNG or JPG. Both current menu entries burn annotations in;
+  `exportCellImage`'s `burnInAnnotations` parameter already supports `false` for a future "without annotations"
+  menu entry, just not wired to the UI yet.
+- `anonymizeSeriesAndExport`: works on **copies** — reads each instance's current blob, blanks a fixed list of
+  identifying tags (`ANON_TAGS`: PatientName, PatientID, PatientBirthDate, addresses, physician names,
+  AccessionNumber, StudyID, StationName — PatientSex/Age deliberately left alone, they're not direct
+  identifiers), assigns a fresh SOPInstanceUID, zips and downloads. **Never touches the loaded series or the
+  live `library`** — anonymizing is purely an export-time transform, so it can't accidentally corrupt what's on
+  screen or drift the series list out of sync with what Cornerstone has cached.
+
+**Header admin editing** (`header.ts` + wiring in `main.ts`) is deliberately **not** wired through Cornerstone's
+imageId/stack system at all, on purpose: a header-only edit doesn't change pixel data, so reloading the stack
+(`cell.load()`) to pick it up would reset zoom/pan/W-L for no reason, and would need re-keying `library.series`
+(keyed by UID) if a UID tag changed. Instead:
+1. `HeaderPanel` keeps the parsed `DicomDict` (`this.msg`, from `DicomMessage.readFile`) alive across edits. An
+   edit calls `msg.upsertTag(tag, vr, value)`, re-renders its own table from the mutated dict, appends a log
+   entry (`{time, tag, name, oldValue, newValue}`, session-only, never persisted), writes `msg.write()` to a new
+   `Blob`, and fires `onCommit(blob, sourceKey)` — `sourceKey` is the imageId `show()` was called with, captured
+   at edit time, not re-derived from "whatever's active now".
+2. `main.ts`'s `onCommit` handler stores the blob in `library.edited` (`Map<baseImageId, Blob>` — keyed without
+   the `?frame=` suffix, so every frame of a multi-frame object shares one edited blob), finds the owning
+   series via `findInstanceByImageId`, and calls `refreshSeriesSummary` to re-derive the series' display fields
+   (patient/study/series text) from the edited blob via `dicom-parser`, then re-renders the series list.
+3. Every blob lookup that should honor edits — the header panel, `Export DICOM`, `Anonymize & export` — goes
+   through `resolveInstanceBlob(imageId)` (checks `library.edited` first, falls back to `wadouri.fileManager`)
+   instead of reading `wadouri.fileManager` directly.
+
+Editable VRs are an explicit allow-list (`EDITABLE_VRS` in `header.ts`): `PN, LO, SH, ST, LT, UT, CS, DA, TM,
+DT, AS` — free text and dates only. **`UI` is deliberately excluded**: StudyInstanceUID/SeriesInstanceUID edits
+aren't supported at all (would require re-keying `library.series`, a Map keyed by SeriesInstanceUID), and
+SOPInstanceUID only changes via the dedicated **Regenerate UID** button (`newUid()` from `wrap.ts`, same UID
+generator used when wrapping JPG/PNG/PDF), which also updates the file-meta `MediaStorageSOPInstanceUID` to
+match. Sequences and binary/numeric VRs stay read-only — a wrong-shaped value for those could make the file
+unreadable elsewhere in ways a text field never would.
+
+**Verified** (headless Chromium): zip import (5 DICOM + 1 JPG, with `__MACOSX/` junk correctly filtered) via the
+file input; Export DICOM produces a zip of valid Part-10 files; Export PNG produces a real non-empty image;
+Anonymize & export produces a zip whose bytes no longer contain the original PatientName; editing PatientName
+in the header panel updates the table, the series list's study title, and the change log immediately, and the
+edit is reflected in a subsequent DICOM export; Regenerate UID changes SOPInstanceUID and logs it; the full
+pre-existing `tests/e2e/*.py` suite (unmodified) still passes, confirming none of this broke phase 1/2. **Not
+verified**: multi-frame objects sharing one edited blob across frames (no multi-frame sample file exists yet —
+see the general NOT-verified multi-frame gap below), editing a JPG/PNG/PDF-wrapped Secondary Capture's header
+(should work the same way since it's still a real DICOM object, just untested), very large series export
+(zipping is synchronous and in-memory — no chunking/streaming), anonymizing a series with hundreds of instances
+(performance untested).
+
 ## Hard-won gotchas — read before changing anything here
 1. **`useLegacyMetadataProvider: true` in `cs.ts` is required.** With Cornerstone v5's default "naturalized metadata"
    path, every load failed with `no pixel data in NATURALIZED` for our fileManager blobs (the same parsing works in
@@ -143,10 +208,8 @@ multi-frame and enhanced CT/MR (code path exists, no test file), JPEG lossy and 
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 
-**Phase 3 — import/export and header editing.** Import zips and DICOMDIR. Export DICOM, PNG/JPG (with or without burned-in
-annotations) and zip. Header editing behind an explicit admin mode: log every change (tag, old, new, timestamp), an
-option to regenerate UIDs, and an anonymization profile. Write edits with dcmjs and re-register the blob.
-DICOMweb (QIDO/WADO/STOW) is a later option for talking to a real PACS.
+**Phase 3 — import/export and header editing. Done**, see above. DICOMweb (QIDO/WADO/STOW) — talking to a real
+PACS instead of local files — was never in scope for phase 3 and is still a later option, not started.
 
 **Phase 4 — hanging protocols.** JSON schema: matching rules (modality, body part, laterality, series description,
 prior vs current), a layout, ordered display-set assignments, per-cell defaults (W/L, orientation). A builder that
@@ -154,4 +217,6 @@ saves the current arrangement, and a matcher that picks the best protocol when a
 
 ## Conventions
 Plain sentence-case UI copy; errors say what happened and how to fix it. The viewport stays true black on purpose.
-Overlay text is pale yellow. Keep the UI keyboard-accessible (visible focus, `aria-*` on toggles).
+Overlay text is a near-white light gray (`--overlay`) — an earlier cyan-tinted version read as "highlighted
+text" against the black background and was reverted; don't reuse the accent color for overlay text. Keep the UI
+keyboard-accessible (visible focus, `aria-*` on toggles).

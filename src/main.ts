@@ -1,11 +1,20 @@
 import './style.css';
 import { utilities as csUtils } from '@cornerstonejs/core';
-import { wadouri } from '@cornerstonejs/dicom-image-loader';
 import { initCornerstone } from './cs';
+import { anonymizeSeriesAndExport, exportCellImage, exportSeriesDicomZip } from './export';
 import { createFlyout } from './flyout';
 import { HeaderPanel } from './header';
 import { fillIcons, icon, layoutIcon, type IconName } from './icons';
-import { entriesFromDataTransfer, filesFromEntries, ingest, library, orderedSeries } from './ingest';
+import {
+  entriesFromDataTransfer,
+  filesFromEntries,
+  findInstanceByImageId,
+  ingest,
+  library,
+  orderedSeries,
+  refreshSeriesSummary,
+  resolveInstanceBlob,
+} from './ingest';
 import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
 import { CT_PRESETS } from './presets';
 import type { Series } from './types';
@@ -124,8 +133,21 @@ function refreshToolbar(): void {
     const [r, c] = b.dataset.layout!.split('x').map(Number);
     b.setAttribute('aria-checked', String(r === layout.layoutRows && c === layout.layoutCols));
   }
-  for (const id of ['#btn-invert', '#btn-flip-h', '#btn-flip-v', '#btn-rotate', '#btn-reset', '#btn-clear-meas']) {
-    ($(id) as HTMLButtonElement).disabled = none;
+  for (const id of [
+    '#btn-invert',
+    '#btn-flip-h',
+    '#btn-flip-v',
+    '#btn-rotate',
+    '#btn-reset',
+    '#btn-clear-meas',
+    '#menu-export-png',
+    '#menu-export-jpg',
+    '#menu-export-dicom',
+    '#menu-anonymize',
+  ]) {
+    const b = $(id) as HTMLButtonElement;
+    b.disabled = none;
+    b.title = none ? 'Open a series first' : '';
   }
   if (!color && st.windowWidth !== undefined) {
     if (document.activeElement !== wwEl) wwEl.value = String(Math.round(st.windowWidth));
@@ -249,9 +271,7 @@ async function pickSeries(s: Series, index = 0): Promise<void> {
 }
 
 function blobForImageId(imageId: string | undefined): Blob | undefined {
-  if (!imageId) return undefined;
-  const m = /^dicomfile:(\d+)/.exec(imageId);
-  return m ? wadouri.fileManager.get(Number(m[1])) : undefined;
+  return imageId ? resolveInstanceBlob(imageId) : undefined;
 }
 
 let headerTimer = 0;
@@ -308,6 +328,29 @@ function wire(): void {
 
   $('#menu-open-files').addEventListener('click', () => fileInput.click());
   $('#menu-open-folder').addEventListener('click', () => folderInput.click());
+
+  const runExport = (label: string, task: () => Promise<void>) => {
+    void task()
+      .then(() => setStatus(`${label} done`))
+      .catch((e) => setStatus(`${label} failed: ${e instanceof Error ? e.message : e}`));
+  };
+  $('#menu-export-png').addEventListener('click', () => {
+    if (layout.activeCell.series) runExport('Export PNG', () => exportCellImage(layout.activeCell, 'png', true));
+  });
+  $('#menu-export-jpg').addEventListener('click', () => {
+    if (layout.activeCell.series) runExport('Export JPG', () => exportCellImage(layout.activeCell, 'jpeg', true));
+  });
+  $('#menu-export-dicom').addEventListener('click', () => {
+    const s = layout.activeCell.series;
+    if (s) runExport('Export DICOM', () => exportSeriesDicomZip(s));
+  });
+  $('#menu-anonymize').addEventListener('click', () => {
+    const s = layout.activeCell.series;
+    if (!s) return;
+    void anonymizeSeriesAndExport(s)
+      .then((r) => setStatus(`Anonymized ${r.instances} image${r.instances === 1 ? '' : 's'}, ${r.tagsChanged} tag${r.tagsChanged === 1 ? '' : 's'} changed`))
+      .catch((e) => setStatus(`Anonymize failed: ${e instanceof Error ? e.message : e}`));
+  });
   for (const input of [fileInput, folderInput]) {
     input.addEventListener('change', () => {
       const files = Array.from(input.files ?? []);
@@ -447,6 +490,16 @@ async function main(): Promise<void> {
   await initCornerstone();
   layout = new LayoutManager(gridEl, (uid) => library.series.get(uid));
   header = new HeaderPanel($('#header-panel'));
+  header.onCommit((blob, sourceKey) => {
+    library.edited.set(sourceKey.split('?')[0], blob);
+    const found = findInstanceByImageId(sourceKey);
+    if (found) {
+      void refreshSeriesSummary(found.series, blob).then(() => {
+        renderSeriesList();
+        refreshOverlays();
+      });
+    }
+  });
   fillPresets(null);
   wire();
   refreshAll();

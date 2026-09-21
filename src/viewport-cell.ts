@@ -28,6 +28,16 @@ export class ViewportCell {
     private readonly viewport: Types.IStackViewport,
   ) {}
 
+  /** The Cornerstone-managed DOM element this cell renders into. */
+  get element(): HTMLDivElement {
+    return this.viewport.element;
+  }
+
+  /** The rendered pixel canvas for the current frame (no annotation overlay). */
+  getCanvas(): HTMLCanvasElement {
+    return this.viewport.getCanvas();
+  }
+
   // ---- series / stack ----
   async load(series: Series, index = 0): Promise<void> {
     this.series = series;

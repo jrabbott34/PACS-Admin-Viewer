@@ -15,15 +15,16 @@
           </button>
           <div id="menu-panel" class="flyout-panel menu-panel" role="menu" aria-label="Menu">
             <div class="flyout-section-label">Import</div>
-            <button type="button" class="flyout-item" id="menu-open-files"><span data-icon="import"></span>Open files…</button>
+            <button type="button" class="flyout-item" id="menu-open-files" title="DICOM, JPG, PNG, PDF and .zip archives"><span data-icon="import"></span>Open files…</button>
             <button type="button" class="flyout-item" id="menu-open-folder"><span data-icon="import"></span>Open folder…</button>
             <div class="flyout-divider"></div>
-            <div class="flyout-section-label">Export</div>
-            <button type="button" class="flyout-item" disabled title="Coming in phase 3"><span data-icon="export"></span>Export image (PNG/JPG)…</button>
-            <button type="button" class="flyout-item" disabled title="Coming in phase 3"><span data-icon="export"></span>Export DICOM…</button>
+            <div class="flyout-section-label">Export active series</div>
+            <button type="button" class="flyout-item" id="menu-export-png" disabled title="Open a series first"><span data-icon="export"></span>Export image as PNG…</button>
+            <button type="button" class="flyout-item" id="menu-export-jpg" disabled title="Open a series first"><span data-icon="export"></span>Export image as JPG…</button>
+            <button type="button" class="flyout-item" id="menu-export-dicom" disabled title="Open a series first"><span data-icon="export"></span>Export DICOM (.zip)…</button>
             <div class="flyout-divider"></div>
             <div class="flyout-section-label">Privacy</div>
-            <button type="button" class="flyout-item" disabled title="Coming in phase 3"><span data-icon="anonymize"></span>Anonymize &amp; export…</button>
+            <button type="button" class="flyout-item" id="menu-anonymize" disabled title="Open a series first"><span data-icon="anonymize"></span>Anonymize &amp; export…</button>
           </div>
         </div>
 

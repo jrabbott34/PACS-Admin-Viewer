@@ -1,5 +1,6 @@
 import dicomParser from 'dicom-parser';
 import { wadouri } from '@cornerstonejs/dicom-image-loader';
+import { unzipSync } from 'fflate';
 import type { IngestReport, InstanceInfo, Series, SeriesKind } from './types';
 import { wrapPdfFile, wrapRasterFile } from './wrap';
 
@@ -7,13 +8,94 @@ import { wrapPdfFile, wrapRasterFile } from './wrap';
 export const library = {
   series: new Map<string, Series>(),
   sops: new Set<string>(),
+  /**
+   * Header-edited replacement blobs, keyed by base imageId (no `?frame=` suffix,
+   * so every frame of a multi-frame object shares one edited blob). Never fed
+   * back into the Cornerstone stack — a pure metadata edit doesn't change pixel
+   * data, so there is nothing to re-render. Consulted by `resolveInstanceBlob`
+   * for the header panel and for export.
+   */
+  edited: new Map<string, Blob>(),
 };
+
+/** Strips the `?frame=N` suffix multi-frame imageIds carry. */
+export function baseImageId(imageId: string): string {
+  return imageId.split('?')[0];
+}
+
+/** The blob for an instance: its header-edited replacement if one exists, else the original. */
+export function resolveInstanceBlob(imageId: string): Blob | undefined {
+  const edited = library.edited.get(baseImageId(imageId));
+  if (edited) return edited;
+  const m = /^dicomfile:(\d+)/.exec(imageId);
+  return m ? wadouri.fileManager.get(Number(m[1])) : undefined;
+}
+
+/** Finds which series/instance an imageId (any frame) belongs to. */
+export function findInstanceByImageId(imageId: string): { series: Series; instance: InstanceInfo } | undefined {
+  const base = baseImageId(imageId);
+  for (const series of library.series.values()) {
+    const instance = series.instances.find((i) => baseImageId(i.imageId) === base);
+    if (instance) return { series, instance };
+  }
+  return undefined;
+}
+
+/** Re-derives a series' summary fields (patient/study/series text) from an edited blob. */
+export async function refreshSeriesSummary(series: Series, blob: Blob): Promise<void> {
+  const ds = await readHeader(blob);
+  if (!ds) return;
+  series.patientName = pn(ds.string('x00100010'));
+  series.patientId = ds.string('x00100020') ?? '';
+  series.studyDescription = ds.string('x00081030') ?? '';
+  series.seriesDescription = ds.string('x0008103e') ?? '';
+  series.studyDate = dicomDate(ds.string('x00080020'));
+  series.institution = ds.string('x00080080') ?? '';
+}
 
 type Sniffed = 'dicom' | 'jpeg' | 'png' | 'gif' | 'bmp' | 'webp' | 'pdf' | 'unknown';
 
 const IGNORED_NAMES = new Set(['.ds_store', 'thumbs.db', 'desktop.ini']);
 // MPEG-2 / MPEG-4 / HEVC video transfer syntaxes are not still images.
 const VIDEO_TS = /^1\.2\.840\.10008\.1\.2\.4\.(10[0-9])$/;
+
+async function isZip(file: File): Promise<boolean> {
+  if (/\.zip$/i.test(file.name)) return true;
+  const h = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  return h[0] === 0x50 && h[1] === 0x4b && (h[2] === 0x03 || h[2] === 0x05 || h[2] === 0x07);
+}
+
+/**
+ * Expand any .zip files in the list into their contained files (recursively, for a
+ * zip inside a zip). DICOMDIR entries need no special handling: they carry no pixel
+ * data, so `ingest` naturally reports them as skipped while every referenced DICOM
+ * file — found loose in the same archive — is read and grouped from its own header.
+ */
+export async function expandArchives(files: File[]): Promise<File[]> {
+  const out: File[] = [];
+  for (const file of files) {
+    if (!(await isZip(file))) {
+      out.push(file);
+      continue;
+    }
+    let entries: Record<string, Uint8Array>;
+    try {
+      entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
+    } catch {
+      out.push(file); // not a real/valid zip; let the normal pipeline report it as unreadable
+      continue;
+    }
+    const extracted: File[] = [];
+    for (const [path, data] of Object.entries(entries)) {
+      if (path.endsWith('/') || !data.length) continue; // directory entry
+      const name = path.split('/').pop() || path;
+      if (path.includes('__MACOSX/') || name.startsWith('._') || IGNORED_NAMES.has(name.toLowerCase())) continue;
+      extracted.push(new File([new Uint8Array(data)], name));
+    }
+    out.push(...(await expandArchives(extracted)));
+  }
+  return out;
+}
 
 async function sniff(file: File): Promise<Sniffed> {
   const h = new Uint8Array(await file.slice(0, 132).arrayBuffer());
@@ -180,7 +262,8 @@ export async function ingest(
 ): Promise<IngestReport> {
   const report: IngestReport = { touched: [], instancesAdded: 0, duplicates: 0, skipped: [] };
   const touched = new Set<Series>();
-  const candidates = files.filter((f) => !IGNORED_NAMES.has(f.name.toLowerCase()));
+  const expanded = await expandArchives(files);
+  const candidates = expanded.filter((f) => !IGNORED_NAMES.has(f.name.toLowerCase()));
   let done = 0;
 
   const handle = async (file: File) => {

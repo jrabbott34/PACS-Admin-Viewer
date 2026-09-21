@@ -1,17 +1,38 @@
 import dcmjs from 'dcmjs';
+import { newUid } from './wrap';
 
 interface Row {
   depth: number;
+  key: string; // raw 8-hex tag, e.g. "00100010" — empty for non-element rows
   tag: string; // "0010,0010"
   name: string;
   vr: string;
   value: string;
+  editable: boolean;
   kind: 'element' | 'item' | 'meta-divider';
+}
+
+interface LogEntry {
+  time: string;
+  tag: string;
+  name: string;
+  oldValue: string;
+  newValue: string;
 }
 
 const { DicomMessage, DicomMetaDictionary } = dcmjs.data;
 const BINARY_VRS = new Set(['OB', 'OW', 'OF', 'OD', 'OL', 'OV', 'UN']);
 const MAX_VALUE_CHARS = 240;
+const SOP_INSTANCE_UID_TAG = '00080018';
+const MEDIA_SOP_INSTANCE_UID_TAG = '00020003';
+/**
+ * VRs safe for a free-text editor: administrative/demographic text and dates.
+ * Deliberately excludes UI (UIDs are structural — StudyInstanceUID and
+ * SeriesInstanceUID changes aren't supported here, and SOPInstanceUID only
+ * changes via "Regenerate UIDs"), sequences, and binary/numeric VRs where a
+ * wrong-shaped value could make the file unreadable elsewhere.
+ */
+const EDITABLE_VRS = new Set(['PN', 'LO', 'SH', 'ST', 'LT', 'UT', 'CS', 'DA', 'TM', 'DT', 'AS']);
 
 function fmtTag(key: string): string {
   return `${key.slice(0, 4)},${key.slice(4, 8)}`.toUpperCase();
@@ -48,6 +69,11 @@ function fmtValue(vr: string, values: unknown[] | undefined): string {
   return joined.length > MAX_VALUE_CHARS ? `${joined.slice(0, MAX_VALUE_CHARS)}…` : joined;
 }
 
+/** Wraps a typed replacement string in the Value shape the given VR expects. */
+function toValue(vr: string, text: string): unknown[] {
+  return vr === 'PN' ? [{ Alphabetic: text }] : [text];
+}
+
 type DictLike = Record<string, { vr?: string; Value?: unknown[] }>;
 
 function walk(dict: DictLike, depth: number, out: Row[]): void {
@@ -61,44 +87,58 @@ function walk(dict: DictLike, depth: number, out: Row[]): void {
       const items = (el.Value ?? []) as DictLike[];
       out.push({
         depth,
+        key,
         tag: fmtTag(key),
         name: tagName(key),
         vr,
         value: `${items.length} item${items.length === 1 ? '' : 's'}`,
+        editable: false,
         kind: 'element',
       });
       items.forEach((item, i) => {
-        out.push({ depth: depth + 1, tag: '', name: `Item ${i + 1}`, vr: '', value: '', kind: 'item' });
+        out.push({ depth: depth + 1, key: '', tag: '', name: `Item ${i + 1}`, vr: '', value: '', editable: false, kind: 'item' });
         walk(item, depth + 2, out);
       });
     } else {
-      out.push({ depth, tag: fmtTag(key), name: tagName(key), vr, value: fmtValue(vr, el.Value), kind: 'element' });
+      out.push({
+        depth,
+        key,
+        tag: fmtTag(key),
+        name: tagName(key),
+        vr,
+        value: fmtValue(vr, el.Value),
+        editable: EDITABLE_VRS.has(vr),
+        kind: 'element',
+      });
     }
   }
 }
 
-/** Read every element of a DICOM Part-10 blob into a flat, indented row list. */
-export async function readRows(blob: Blob): Promise<Row[]> {
-  const buffer = await blob.arrayBuffer();
-  const msg = DicomMessage.readFile(buffer, { ignoreErrors: true });
+function buildRows(msg: { meta: DictLike; dict: DictLike }): Row[] {
   const rows: Row[] = [];
-  walk(msg.meta as DictLike, 0, rows);
-  if (rows.length) rows.push({ depth: 0, tag: '', name: 'Dataset', vr: '', value: '', kind: 'meta-divider' });
-  walk(msg.dict as DictLike, 0, rows);
+  walk(msg.meta, 0, rows);
+  if (rows.length) rows.push({ depth: 0, key: '', tag: '', name: 'Dataset', vr: '', value: '', editable: false, kind: 'meta-divider' });
+  walk(msg.dict, 0, rows);
   return rows;
 }
 
-export type { Row };
-
-/** Header side panel: searchable tag table for the image currently on screen. */
+/** Header side panel: searchable tag table for the image currently on screen, with an admin edit mode. */
 export class HeaderPanel {
   private root: HTMLElement;
   private body: HTMLElement;
   private search: HTMLInputElement;
   private count: HTMLElement;
+  private editBtn: HTMLButtonElement;
+  private regenBtn: HTMLButtonElement;
+  private logBtn: HTMLButtonElement;
+  private logPanel: HTMLElement;
   private rows: Row[] = [];
-  private token = 0;
+  private msg: { meta: DictLike; dict: DictLike; write: (opts?: unknown) => ArrayBuffer } | null = null;
   private lastKey = '';
+  private token = 0;
+  private editing = false;
+  private log: LogEntry[] = [];
+  private commitCb: ((blob: Blob, sourceKey: string) => void) | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -106,12 +146,24 @@ export class HeaderPanel {
       <div class="hp-head">
         <input type="search" class="hp-search" placeholder="Filter by tag, name or value" aria-label="Filter DICOM tags" />
         <span class="hp-count" aria-live="polite"></span>
+        <button type="button" class="hp-edit" aria-pressed="false" title="Admin mode: edit text and date tags">Edit</button>
+        <button type="button" class="hp-regen" disabled title="Assign a new SOPInstanceUID to this object">Regen UID</button>
+        <button type="button" class="hp-log" title="Change log">Log</button>
       </div>
-      <div class="hp-scroll"><table class="hp-table"><tbody></tbody></table></div>`;
+      <div class="hp-scroll"><table class="hp-table"><tbody></tbody></table></div>
+      <div class="hp-log-panel" hidden></div>`;
     this.search = root.querySelector('.hp-search')!;
     this.count = root.querySelector('.hp-count')!;
+    this.editBtn = root.querySelector('.hp-edit')!;
+    this.regenBtn = root.querySelector('.hp-regen')!;
+    this.logBtn = root.querySelector('.hp-log')!;
+    this.logPanel = root.querySelector('.hp-log-panel')!;
     this.body = root.querySelector('tbody')!;
     this.search.addEventListener('input', () => this.render());
+    this.editBtn.addEventListener('click', () => this.setEditing(!this.editing));
+    this.regenBtn.addEventListener('click', () => this.regenerateSopUid());
+    this.logBtn.addEventListener('click', () => this.toggleLog());
+    this.body.addEventListener('click', (e) => this.onCellClick(e));
   }
 
   get visible(): boolean {
@@ -122,23 +174,126 @@ export class HeaderPanel {
     this.root.hidden = !v;
   }
 
+  /** Called with the edited blob and the imageId it was shown under, every time an edit commits. */
+  onCommit(cb: (blob: Blob, sourceKey: string) => void): void {
+    this.commitCb = cb;
+  }
+
   /** Load the header for a blob. `key` de-duplicates repeated calls for the same image. */
   async show(blob: Blob | undefined, key: string): Promise<void> {
     if (!blob || key === this.lastKey) return;
     this.lastKey = key;
     const mine = ++this.token;
     try {
-      const rows = await readRows(blob);
+      const buffer = await blob.arrayBuffer();
+      const msg = DicomMessage.readFile(buffer, { ignoreErrors: true });
       if (mine !== this.token) return;
-      this.rows = rows;
+      this.msg = msg;
+      this.rows = buildRows(msg);
     } catch (e) {
       if (mine !== this.token) return;
+      this.msg = null;
       this.rows = [];
       this.count.textContent = `Could not read header: ${e instanceof Error ? e.message : e}`;
       this.body.replaceChildren();
       return;
     }
+    this.regenBtn.disabled = !this.editing;
     this.render();
+  }
+
+  private setEditing(v: boolean): void {
+    this.editing = v;
+    this.root.classList.toggle('editing', v);
+    this.editBtn.setAttribute('aria-pressed', String(v));
+    this.regenBtn.disabled = !v || !this.msg;
+    this.render();
+  }
+
+  private toggleLog(): void {
+    this.logPanel.hidden = !this.logPanel.hidden;
+    this.logBtn.setAttribute('aria-pressed', String(!this.logPanel.hidden));
+    this.renderLog();
+  }
+
+  private onCellClick(e: MouseEvent): void {
+    if (!this.editing) return;
+    const td = (e.target as HTMLElement).closest<HTMLTableCellElement>('td.hp-editable');
+    if (!td || td.querySelector('input')) return;
+    this.beginEdit(td);
+  }
+
+  private beginEdit(td: HTMLTableCellElement): void {
+    const key = td.dataset.key!;
+    const vr = td.dataset.vr!;
+    const original = td.textContent ?? '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = original;
+    input.className = 'hp-edit-input';
+    td.textContent = '';
+    td.append(input);
+    input.focus();
+    input.select();
+
+    const finish = (commit: boolean) => {
+      input.removeEventListener('keydown', onKey);
+      input.removeEventListener('blur', onBlur);
+      if (commit && input.value !== original) this.commitEdit(key, vr, tagName(key), original, input.value);
+      else this.render();
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Enter') finish(true);
+      else if (ev.key === 'Escape') finish(false);
+    };
+    const onBlur = () => finish(true);
+    input.addEventListener('keydown', onKey);
+    input.addEventListener('blur', onBlur);
+  }
+
+  private commitEdit(key: string, vr: string, name: string, oldValue: string, newValue: string): void {
+    if (!this.msg) return;
+    (this.msg as unknown as { upsertTag: (t: string, vr: string, v: unknown[]) => void }).upsertTag(key, vr, toValue(vr, newValue));
+    this.afterMutate({ time: new Date().toLocaleTimeString(), tag: fmtTag(key), name, oldValue, newValue });
+  }
+
+  private regenerateSopUid(): void {
+    if (!this.msg) return;
+    const uid = newUid();
+    const dict = this.msg as unknown as { upsertTag: (t: string, vr: string, v: unknown[]) => void };
+    const oldValue = fmtValue('UI', this.msg.dict[SOP_INSTANCE_UID_TAG]?.Value);
+    dict.upsertTag(SOP_INSTANCE_UID_TAG, 'UI', [uid]);
+    if (this.msg.meta[MEDIA_SOP_INSTANCE_UID_TAG]) this.msg.meta[MEDIA_SOP_INSTANCE_UID_TAG].Value = [uid];
+    this.afterMutate({ time: new Date().toLocaleTimeString(), tag: fmtTag(SOP_INSTANCE_UID_TAG), name: 'SOPInstanceUID', oldValue, newValue: uid });
+  }
+
+  private afterMutate(entry: LogEntry): void {
+    if (!this.msg) return;
+    this.log.unshift(entry);
+    this.rows = buildRows(this.msg);
+    this.render();
+    this.renderLog();
+    const bytes = this.msg.write();
+    const blob = new Blob([bytes], { type: 'application/dicom' });
+    this.commitCb?.(blob, this.lastKey);
+  }
+
+  private renderLog(): void {
+    if (this.logPanel.hidden) {
+      this.logBtn.textContent = this.log.length ? `Log (${this.log.length})` : 'Log';
+      return;
+    }
+    this.logBtn.textContent = `Log (${this.log.length})`;
+    if (!this.log.length) {
+      this.logPanel.innerHTML = '<div class="hp-log-empty">No edits yet this session.</div>';
+      return;
+    }
+    this.logPanel.innerHTML = this.log
+      .map(
+        (e) =>
+          `<div class="hp-log-row"><span class="hp-log-time">${e.time}</span><span class="hp-log-tag">${e.tag}</span><span class="hp-log-name">${e.name}</span><span class="hp-log-change">"${e.oldValue}" → "${e.newValue}"</span></div>`,
+      )
+      .join('');
   }
 
   private render(): void {
@@ -168,9 +323,14 @@ export class HeaderPanel {
         name.textContent = r.name;
         name.title = r.vr ? `${r.name} (${r.vr})` : r.name;
         const val = document.createElement('td');
-        val.className = 'hp-value';
+        val.className = r.editable && this.editing ? 'hp-value hp-editable' : 'hp-value';
         val.textContent = r.value;
-        val.title = r.value;
+        val.title = r.editable && this.editing ? `${r.value} — click to edit` : r.value;
+        if (r.editable && this.editing) {
+          val.dataset.key = r.key;
+          val.dataset.vr = r.vr;
+          val.tabIndex = 0;
+        }
         tr.append(tag, name, val);
       }
       frag.append(tr);
