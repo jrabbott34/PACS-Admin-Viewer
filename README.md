@@ -26,8 +26,9 @@ slices, a JPG, a PNG and a 2-page PDF).
   it there — or drag a series from the list straight onto any cell. Switching layouts never loses what's loaded.
 - Per-cell scroll, Window/Level, pan, zoom, invert, flip, rotate, reset. An optional "Link scroll" keeps every
   cell's slice index in sync.
-- Measurement tools: Length, Angle, Rectangle ROI, Ellipse ROI, Probe — calibrated to real-world units from the
-  DICOM pixel spacing where available. "Clear" removes all measurements from the active cell.
+- Measurement tools, always visible in their own toolbar group (no menu-diving): Length, Angle, Rectangle ROI,
+  Ellipse ROI, Probe — calibrated to real-world units from the DICOM pixel spacing where available (Probe
+  reports Hounsfield units directly on CT). "Clear" removes all measurements from the active cell.
 - CT window presets, typed W/L values, "Default" (from the DICOM tags) and "Full range".
 - Searchable DICOM header panel for the active cell, including nested sequences and private tags. An **Edit**
   toggle turns on admin mode: click any text/date tag to change it, with every change logged (old value, new
@@ -39,8 +40,11 @@ slices, a JPG, a PNG and a 2-page PDF).
   birth date, addresses, physician names, accession/station — with a fresh SOPInstanceUID per file; the loaded
   series itself is never touched).
 - Per-cell overlays: patient/study, series, image number, slice location and thickness, W/L, zoom.
-- Icon toolbar with three "explode down" pickers — **☰ Menu**, **Layout**, and **Tools** — plus a compact row of
-  icon buttons for invert, flip, rotate, reset, clear measurements and link scroll.
+- Icon toolbar: a **☰ Menu** and a **Layout** picker that "explode down" from a trigger button, always-visible
+  labeled tool buttons (Navigate: Scroll/W-L/Pan/Zoom; Measure: Length/Angle/Rect/Ellipse/Probe — no dropdown
+  to find first), and a compact row of icon buttons for invert, flip, rotate, reset, clear measurements and
+  link scroll.
+- A splash screen ("PACS Admin DICOM Viewer") on launch while the viewer initializes.
 
 ## Mouse and keyboard
 

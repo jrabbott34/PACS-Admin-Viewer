@@ -58,13 +58,19 @@
           <div id="layout-panel" class="flyout-panel grid-panel" role="radiogroup" aria-label="Viewport layout"></div>
         </div>
 
-        <div class="group flyout" id="tools-flyout">
-          <button id="tools-trigger" type="button" class="flyout-trigger" title="Left mouse button tool">
-            <span id="tools-trigger-icon"></span>
-            <span id="tools-trigger-label">Window/Level</span>
-            <span class="caret" data-icon="caret" data-icon-size="12"></span>
-          </button>
-          <div id="tools-panel" class="flyout-panel grid-panel" role="radiogroup" aria-label="Left mouse button tool"></div>
+        <div class="group segmented" role="radiogroup" aria-label="Navigation tool">
+          <button type="button" class="tool-btn" data-tool="scroll" title="Scroll (S) — drag to move through the stack"><span data-icon="scroll"></span>Scroll</button>
+          <button type="button" class="tool-btn" data-tool="wl" title="Window/Level (W) — drag to adjust"><span data-icon="wl"></span>W/L</button>
+          <button type="button" class="tool-btn" data-tool="pan" title="Pan (P)"><span data-icon="pan"></span>Pan</button>
+          <button type="button" class="tool-btn" data-tool="zoom" title="Zoom (Z)"><span data-icon="zoom"></span>Zoom</button>
+        </div>
+
+        <div class="group segmented" role="radiogroup" aria-label="Measurement tool">
+          <button type="button" class="tool-btn" data-tool="length" title="Length — linear measurement"><span data-icon="length"></span>Length</button>
+          <button type="button" class="tool-btn" data-tool="angle" title="Angle"><span data-icon="angle"></span>Angle</button>
+          <button type="button" class="tool-btn" data-tool="rectangleroi" title="Rectangle ROI"><span data-icon="rectangleroi"></span>Rect</button>
+          <button type="button" class="tool-btn" data-tool="ellipticalroi" title="Ellipse ROI"><span data-icon="ellipticalroi"></span>Ellipse</button>
+          <button type="button" class="tool-btn" data-tool="probe" title="Probe — pixel value at a point (Hounsfield units on CT)"><span data-icon="probe"></span>Probe</button>
         </div>
 
         <div class="group wl">

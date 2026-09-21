@@ -75,15 +75,12 @@ compact row of icon buttons, using `createFlyout()` (`src/flyout.ts`) and the ic
 - **Layout** (`#layout-trigger` / `#layout-panel`): a 3-column grid of the six `LAYOUT_PRESETS`, each rendered
   with `layoutIcon(rows, cols)` — the icon is generated from the actual preset, not a static asset, so it can't
   drift out of sync.
-- **Tools** (`#tools-trigger` / `#tools-panel`): a 3x3 grid of all nine `PrimaryTool`s (`TOOL_META` in
-  `main.ts` is the single source of icon/label/tooltip for each). Picking one closes the flyout (generic
-  behavior in `createFlyout`: any non-disabled button click inside the panel closes it).
+Tool selection (`[data-tool]`) is **not** a flyout — see "Tool selection is always-visible" below, which
+superseded the original hidden-behind-a-dropdown design after real users couldn't find it twice in a row.
 
-Both the Layout and Tools trigger buttons show the *current* selection's icon and label — updated in
-`refreshToolbar()` every time `layout.onChange` fires, from `TOOL_META[layout.primaryTool]` and
-`layoutIcon(layout.layoutRows, layout.layoutCols)`. `[data-tool]`/`[data-layout]` buttons still exist (now
-generated, not static HTML) and still carry `role="radio"`/`aria-checked`, so the existing toolbar-state
-refresh logic needed almost no change.
+The Layout trigger button shows the *current* layout's icon and label — updated in `refreshToolbar()` every
+time `layout.onChange` fires, from `layoutIcon(layout.layoutRows, layout.layoutCols)`. `[data-layout]` buttons
+are generated (not static HTML) and carry `role="radio"`/`aria-checked`.
 
 Static toolbar/menu icons are placeholders in `index.html` (`<span data-icon="...">`) filled once by
 `fillIcons()` at the top of `wire()`. Dynamically generated buttons (Tools/Layout flyout items) call `icon()`/
@@ -163,6 +160,37 @@ see the general NOT-verified multi-frame gap below), editing a JPG/PNG/PDF-wrapp
 (should work the same way since it's still a real DICOM object, just untested), very large series export
 (zipping is synchronous and in-memory — no chunking/streaming), anonymizing a series with hundreds of instances
 (performance untested).
+
+## Tool selection is always-visible, not a flyout
+The original phase-2 redesign put all nine `PrimaryTool`s behind a single "Tools" flyout (icon + current
+label + caret, click to expand a 3x3 grid). In practice a real user opened the app twice and never found the
+measurement tools at all — a dropdown whose trigger just shows "Window/Level" doesn't read as "click me for
+more tools" at a glance. That flyout is gone. Tool selection is now two always-visible, always-labeled
+segmented button groups directly in the toolbar (`index.html`, static markup, `class="tool-btn"`,
+`data-tool="..."`, `data-icon="..."`):
+- **Navigate** (`role="radiogroup" aria-label="Navigation tool"`): Scroll, W/L, Pan, Zoom.
+- **Measure** (`role="radiogroup" aria-label="Measurement tool"`): Length, Angle, Rect, Ellipse, Probe.
+
+Each button is icon + short visible text label (not icon-only — the whole point is that it can't be missed),
+`.tool-btn` styled at the standard 28px toolbar-button height so the row doesn't jump around, `.segmented`
+giving each group a connected-pill look (revived from the pre-flyout design, since nothing else needed it
+until now). `main.ts` wiring is back to the simple pre-flyout pattern too: a plain
+`document.querySelectorAll('[data-tool]')` click-binding loop (no panel generation, no `createFlyout` call),
+and `refreshToolbar()` toggles both `.active` (for the `button.active` accent-highlight CSS rule) and
+`aria-checked` on whichever button matches `layout.primaryTool`. `TOOL_META` (icon/label/tooltip lookup) is
+gone from `main.ts` — with the buttons hand-written in HTML there was nothing left to generate them from.
+
+If tool selection needs a flyout again for space reasons (e.g. a much smaller viewport), the trigger must show
+more than the current tool's name to read as clickable — a visible "Tools" word plus the icon, not just
+whatever's currently selected — or it will regress to the same discoverability problem.
+
+**Probe on CT already reports Hounsfield units** — no work needed. Cornerstone's `ProbeTool` calls
+`getPixelValueUnits(modality, ...)` internally, which returns `'HU'` for `modality === 'CT'` (from the image's
+resolved DICOM metadata) and appends it to the displayed value automatically. Verified: probing the synthetic
+CT phantom (`RescaleSlope=1`, `RescaleIntercept=0`) rendered "44.0 HU" in the annotation text. This only works
+if the metadata provider resolves `generalSeriesModule.modality` correctly for the imageId, which it does here
+(confirmed by the same test) — if a future change to the legacy-metadata-provider workaround (gotcha #1) ever
+breaks metadata resolution, this is the first symptom that would show it.
 
 ## Splash screen
 `index.html` has a `#splash` overlay (title, an inline-SVG scan/crosshair motif — no CDN, same rule as

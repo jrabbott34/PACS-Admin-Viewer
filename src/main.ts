@@ -4,7 +4,7 @@ import { initCornerstone } from './cs';
 import { anonymizeSeriesAndExport, exportCellImage, exportSeriesDicomZip } from './export';
 import { createFlyout } from './flyout';
 import { HeaderPanel } from './header';
-import { fillIcons, icon, layoutIcon, type IconName } from './icons';
+import { fillIcons, layoutIcon } from './icons';
 import {
   entriesFromDataTransfer,
   filesFromEntries,
@@ -41,21 +41,6 @@ const linkScrollBtn = $<HTMLButtonElement>('#btn-link-scroll');
 const layoutPanelEl = $('#layout-panel');
 const layoutTriggerIconEl = $('#layout-trigger-icon');
 const layoutTriggerLabelEl = $('#layout-trigger-label');
-const toolsPanelEl = $('#tools-panel');
-const toolsTriggerIconEl = $('#tools-trigger-icon');
-const toolsTriggerLabelEl = $('#tools-trigger-label');
-
-const TOOL_META: Record<PrimaryTool, { icon: IconName; label: string; hint: string }> = {
-  scroll: { icon: 'scroll', label: 'Scroll', hint: 'Scroll (S) — drag to move through the stack' },
-  wl: { icon: 'wl', label: 'Window/Level', hint: 'Window/Level (W) — drag to adjust' },
-  pan: { icon: 'pan', label: 'Pan', hint: 'Pan (P)' },
-  zoom: { icon: 'zoom', label: 'Zoom', hint: 'Zoom (Z)' },
-  length: { icon: 'length', label: 'Length', hint: 'Length — measured in real-world units where calibrated' },
-  angle: { icon: 'angle', label: 'Angle', hint: 'Angle' },
-  rectangleroi: { icon: 'rectangleroi', label: 'Rectangle ROI', hint: 'Rectangle ROI' },
-  ellipticalroi: { icon: 'ellipticalroi', label: 'Ellipse ROI', hint: 'Ellipse ROI' },
-  probe: { icon: 'probe', label: 'Probe', hint: 'Probe — pixel value at a point' },
-};
 
 let layout: LayoutManager;
 let header: HeaderPanel;
@@ -135,11 +120,10 @@ function refreshToolbar(): void {
   $('#btn-flip-v').setAttribute('aria-pressed', String(st.flipV));
   linkScrollBtn.setAttribute('aria-pressed', String(layout.linkScroll));
 
-  const toolMeta = TOOL_META[layout.primaryTool];
-  toolsTriggerIconEl.innerHTML = icon(toolMeta.icon);
-  toolsTriggerLabelEl.textContent = toolMeta.label;
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
-    b.setAttribute('aria-checked', String(b.dataset.tool === layout.primaryTool));
+    const on = b.dataset.tool === layout.primaryTool;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', String(on));
   }
 
   layoutTriggerIconEl.innerHTML = layoutIcon(layout.layoutRows, layout.layoutCols);
@@ -375,19 +359,10 @@ function wire(): void {
   }
 
   createFlyout($<HTMLButtonElement>('#menu-trigger'), $('#menu-panel'));
-  createFlyout($<HTMLButtonElement>('#tools-trigger'), toolsPanelEl);
   createFlyout($<HTMLButtonElement>('#layout-trigger'), layoutPanelEl);
 
-  for (const [key, meta] of Object.entries(TOOL_META) as [PrimaryTool, (typeof TOOL_META)[PrimaryTool]][]) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'flyout-item';
-    b.dataset.tool = key;
-    b.title = meta.hint;
-    b.setAttribute('role', 'radio');
-    b.innerHTML = `${icon(meta.icon)}<span>${meta.label}</span>`;
-    b.addEventListener('click', () => layout.setPrimaryTool(key));
-    toolsPanelEl.append(b);
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
+    b.addEventListener('click', () => layout.setPrimaryTool(b.dataset.tool as PrimaryTool));
   }
 
   for (const p of LAYOUT_PRESETS) {

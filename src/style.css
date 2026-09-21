@@ -108,6 +108,14 @@ button[aria-pressed="true"], button.active {
 .wl input { width: 68px; padding: 0 6px; font-variant-numeric: tabular-nums; }
 .wl select { max-width: 130px; }
 
+/* ---------- always-visible tool groups (Navigate / Measure) ---------- */
+.segmented { gap: 0; }
+.segmented .tool-btn { border-radius: 0; margin-left: -1px; }
+.segmented .tool-btn:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.segmented .tool-btn:last-child { border-radius: 0 4px 4px 0; }
+.segmented .tool-btn.active { position: relative; z-index: 1; }
+.tool-btn { display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; }
+
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
