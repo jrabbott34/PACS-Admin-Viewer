@@ -343,6 +343,73 @@ context, so no cross-test contamination) still passes. **Not verified**: storage
 re-ingest is slow, IndexedDB behavior in a private/incognito window (typically ephemeral or blocked by design —
 the library just won't survive there, which is correct, not a bug to fix).
 
+## Cell interaction: swap-by-drag, maximize, and the series panel
+A batch of direct usability requests, all in `layout.ts` / `main.ts` / `style.css` unless noted:
+
+- **Active-cell color** is its own token, `--select: #2dd4bf` (a cool teal), separate from `--accent`
+  (`#38bdf8`, sky-blue) — they used to be the same color, and the active-cell border didn't stand out enough
+  against all the other accent-colored chrome (buttons, highlights). `.cell.active` uses a 3px inset
+  `box-shadow` plus a soft outer glow, not a `border` (a real border would shift layout by its width; a
+  `box-shadow` doesn't).
+- **Cell-to-cell drag** (drag one viewport's series onto another) reuses the same `text/x-series-uid` payload
+  the series-list-to-cell drop already used, plus a second MIME type, `text/x-cell-index`, set only when the
+  drag originates from a cell — that's how the drop handler in `ensureCell()` tells "drag from the list"
+  (assign, non-destructive) apart from "drag from another cell" (`swapCells()`, see below).
+  **The drag handle is the per-cell overlay text (`.ov` elements), not the whole cell wrapper.** Making the
+  whole `.cell` draggable was considered and rejected: HTML5 drag-and-drop and Cornerstone's own mouse-based
+  tool interactions (drawing a measurement is also a mousedown-drag-mouseup gesture) would fight over the same
+  mousedown, breaking tool drags inside cells. The overlay text corners are a safe, separate hit target
+  (`pointer-events: auto` layered on the otherwise `pointer-events: none` `.cell-overlay`), styled
+  `cursor: grab`.
+  `swapCells(sourceIndex, targetIndex)`: if the target already has a series, they trade places; if the target
+  is empty, the source's series is copied there and the source keeps showing it too — a cell is never left
+  empty by a drag, for the same reason `clearLocalLibrary()` reloads the page instead of hand-clearing a
+  viewport (gotcha: Cornerstone's `StackViewport.setStack()` isn't meant to be pointed at an empty array).
+- **Double-click to maximize/restore** (`toggleMaximize()`/`setMaximized()`): interpreted "double-click and go
+  1x1 in a pop-out window" as an in-page maximize, not a literal second OS window — a second window would need
+  to either re-initialize Cornerstone in a new document or proxy rendering across `window.opener`, both far
+  more machinery than "focus on this one image" actually needs, and double-click-to-maximize/restore is a
+  well-established pattern (video calls, image viewers) that reads correctly without documentation.
+  Deliberately **CSS-only**: `.viewport-grid.maximized .cell:not(.maximized) { display: none }` and
+  `.cell.maximized { grid-column: 1/-1; grid-row: 1/-1 }` — hides every other cell and stretches the target to
+  fill the grid, without calling `setLayout()` or touching any series assignment. This means restoring is just
+  removing the classes; nothing was ever reloaded or reassigned, so there's no risk of losing what was in the
+  other cells (the same "don't touch Cornerstone's stack state for a non-pixel change" principle as the header
+  editor and `clearLocalLibrary`). Picking a new layout while maximized un-maximizes first
+  (`setLayout()` calls `setMaximized(null)` before applying the new grid), so the two features can't leave the
+  UI in a confusing combined state.
+- **Resizable/collapsible series panel**: `#app`'s grid uses `grid-template-columns: var(--series-w, 248px) ...`;
+  `main.ts` sets that CSS custom property directly (`document.documentElement.style.setProperty`) from a
+  `mousedown`/`mousemove`/`mouseup` drag on `#series-resize` (an absolutely-positioned 6px handle at the panel's
+  right edge — `.series` needed `position: relative` to anchor it) clamped to `[SERIES_MIN_W, SERIES_MAX_W]` =
+  `[160, 480]`. A new toolbar icon button (`#btn-toggle-series`, the "sidebar" icon) sets `--series-w: 0px` and
+  a `.collapsed` class instead of hiding via `hidden`, so the same variable drives both resize and collapse and
+  there's only one code path to keep correct. Collapsing remembers the pre-collapse width (`seriesWidth` isn't
+  reset), so un-collapsing restores exactly where it was, not the 248px default.
+  **Gotcha hit while building this**: the series list content (`renderSeriesList()`'s target) had to move from
+  the outer `#series` aside into a new inner `#series-list` div, because `renderSeriesList()` calls
+  `seriesEl.replaceChildren()` on every refresh — if that target were still the outer element, it would wipe
+  out the resize handle (a sibling-in-waiting) on every series list update. `main.ts`'s `seriesEl` constant now
+  points at `#series-list`; a separate `seriesPanelEl` constant points at the outer `#series` for the
+  resize/collapse logic.
+  A **second gotcha**, caught by testing (not by reasoning about it in advance): giving `.series` a bare
+  `position: relative` (needed as the containing block for the resize handle) made the Layout flyout panel
+  render *underneath* the series panel when open over it — Playwright's `.click()` failed with
+  `#series-list ... intercepts pointer events`. Investigated and it turned out to be a false alarm from the
+  test script itself (it tried to click a layout preset button without first clicking `#layout-trigger` to
+  open that flyout — an invisible, `pointer-events: none` target correctly falls through to whatever's
+  actually visible underneath it, which was the series panel). Worth remembering next time a flyout-related
+  test fails with a "some other element intercepts pointer events" message: check whether the flyout was
+  actually opened first before suspecting a real z-index/stacking bug.
+
+**Verified** (headless Chromium): the active cell's `box-shadow` computes to the teal `rgb(45, 212, 191)`;
+dragging one cell's series onto another (synthetic `DragEvent('drop', …)` with both MIME types, same technique
+as the series-list-to-cell drag test) correctly swaps two populated cells' series; double-click maximizes
+(`maximizedIndex` set, `.maximized` class present) and a second double-click restores it
+(`maximizedIndex → null`); dragging `#series-resize` changes `--series-w` by the drag distance (clamped);
+clicking the toggle button collapses to `0px` and restores the previous (resized) width, not the default. The
+full pre-existing `tests/e2e/*.py` suite still passes.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 

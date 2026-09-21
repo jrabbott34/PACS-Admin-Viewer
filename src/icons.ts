@@ -24,7 +24,8 @@ export type IconName =
   | 'header'
   | 'import'
   | 'export'
-  | 'anonymize';
+  | 'anonymize'
+  | 'sidebar';
 
 const PATHS: Record<IconName, string> = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -50,6 +51,7 @@ const PATHS: Record<IconName, string> = {
   export: '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4"/>',
   anonymize:
     '<path d="M3 3l18 18"/><path d="M10.6 5.1A9.4 9.4 0 0112 5c5 0 8.5 4 9.9 7a15 15 0 01-3 4M6.2 6.2A15 15 0 002.1 12c1 2 3 4.4 5.7 5.8M9.9 9.9a3 3 0 004.2 4.2"/>',
+  sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
 };
 
 export function icon(name: IconName, size = 18): string {

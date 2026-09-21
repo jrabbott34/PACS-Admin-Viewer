@@ -8,6 +8,7 @@
   --accent: #38bdf8;
   --accent-ink: #04202c;
   --overlay: #e7ecf2;
+  --select: #2dd4bf;
   color-scheme: dark;
 }
 
@@ -84,7 +85,7 @@ body {
 #app {
   display: grid;
   height: 100%;
-  grid-template-columns: 248px minmax(0, 1fr) auto;
+  grid-template-columns: var(--series-w, 248px) minmax(0, 1fr) auto;
   grid-template-rows: auto minmax(0, 1fr) 26px;
   grid-template-areas:
     "toolbar toolbar toolbar"
@@ -210,10 +211,26 @@ button[aria-pressed="true"], button.active {
 /* ---------- series list ---------- */
 .series {
   grid-area: series;
+  position: relative;
   overflow-y: auto;
+  overflow-x: hidden;
   border-right: 1px solid var(--line);
   padding: 8px;
+  min-width: 0;
 }
+.series.collapsed { padding: 0; border-right: none; overflow: hidden; }
+.series-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 6;
+  background: transparent;
+}
+.series-resize:hover, .series-resize.dragging { background: var(--accent); opacity: 0.5; }
+.series.collapsed .series-resize { display: none; }
 .study-title {
   margin: 10px 4px 6px;
   font-size: 12px;
@@ -258,7 +275,11 @@ button[aria-pressed="true"], button.active {
 }
 .cell { position: relative; background: #000; overflow: hidden; }
 .cell[hidden] { display: none; }
-.cell.active { box-shadow: inset 0 0 0 2px var(--accent); }
+.cell.active { box-shadow: inset 0 0 0 3px var(--select), 0 0 16px -4px var(--select); z-index: 1; }
+
+/* Double-click a cell to fill the grid; double-click again (or pick a new layout) to restore. */
+.viewport-grid.maximized .cell:not(.maximized) { display: none; }
+.viewport-grid.maximized .cell.maximized { grid-column: 1 / -1; grid-row: 1 / -1; }
 .cs-el { position: absolute; inset: 0; }
 
 .cell-overlay { position: absolute; inset: 0; pointer-events: none; }
@@ -271,7 +292,11 @@ button[aria-pressed="true"], button.active {
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 3px #000, 0 0 3px #000;
   white-space: pre;
+  /* Doubles as a drag handle for moving/swapping this cell's series onto another cell. */
+  pointer-events: auto;
+  cursor: grab;
 }
+.ov:active { cursor: grabbing; }
 .ov.tl { top: 0; left: 0; }
 .ov.tr { top: 0; right: 0; text-align: right; }
 .ov.bl { bottom: 0; left: 0; }

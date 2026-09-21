@@ -26,7 +26,7 @@
         <circle cx="80" cy="80" r="5" fill="#38bdf8" />
       </svg>
       <h1 class="splash-title">PACS Admin<br />DICOM Viewer</h1>
-      <p class="splash-byline">by Jason Abbott</p>
+      <p class="splash-byline">Created by Jason Abbott</p>
       <p class="splash-status" id="splash-status">Starting…</p>
       <button type="button" id="splash-open" class="splash-open" hidden>Open Viewer</button>
     </div>
@@ -95,11 +95,15 @@
         </div>
 
         <div class="group push">
+          <button id="btn-toggle-series" type="button" class="icon-btn" aria-pressed="false" title="Show/hide the series panel"><span data-icon="sidebar"></span><span class="sr-only">Toggle series panel</span></button>
           <button id="btn-header" type="button" class="icon-btn" aria-pressed="false" title="DICOM header (H)"><span data-icon="header"></span><span class="sr-only">Header</span></button>
         </div>
       </header>
 
-      <aside id="series" class="series" aria-label="Series"></aside>
+      <aside id="series" class="series" aria-label="Series">
+        <div id="series-list"></div>
+        <div id="series-resize" class="series-resize" title="Drag to resize"></div>
+      </aside>
 
       <main class="stage">
         <div id="viewport-grid" class="viewport-grid"></div>

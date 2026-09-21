@@ -88,6 +88,7 @@ export class LayoutManager {
   private listeners = new Set<() => void>();
   private pending = 0;
   private syncing = false;
+  private maximized: number | null = null;
   linkScroll = false;
 
   constructor(
@@ -150,15 +151,40 @@ export class LayoutManager {
 
     wrapper.append(csElement, overlayWrap, placeholder);
     wrapper.addEventListener('mousedown', () => this.setActive(index));
+    wrapper.addEventListener('dblclick', () => this.toggleMaximize(index));
     wrapper.addEventListener('dragover', (e) => {
       if (e.dataTransfer?.types.includes('text/x-series-uid')) e.preventDefault();
     });
     wrapper.addEventListener('drop', (e) => {
       e.preventDefault();
+      const sourceIndex = e.dataTransfer?.getData('text/x-cell-index');
+      if (sourceIndex) {
+        const src = Number(sourceIndex);
+        if (!Number.isNaN(src)) {
+          void this.swapCells(src, index);
+          return;
+        }
+      }
       const uid = e.dataTransfer?.getData('text/x-series-uid');
       const series = uid ? this.getSeriesByUid(uid) : undefined;
       if (series) void this.assign(index, series);
     });
+    // The overlay text doubles as a drag handle for moving/swapping a cell's series
+    // onto another cell — dragging the whole wrapper would fight Cornerstone's own
+    // mouse-based tool interactions (drawing a measurement is also a drag).
+    for (const el of Object.values(overlay)) {
+      el.draggable = true;
+      el.addEventListener('dragstart', (e) => {
+        const series = this.entries[index]?.cell.series;
+        if (!series) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer!.setData('text/x-series-uid', series.uid);
+        e.dataTransfer!.setData('text/x-cell-index', String(index));
+        e.dataTransfer!.effectAllowed = 'move';
+      });
+    }
 
     this.container.append(wrapper);
 
@@ -207,6 +233,7 @@ export class LayoutManager {
   }
 
   setLayout(rows: number, cols: number): void {
+    if (this.maximized !== null) this.setMaximized(null);
     this.rows = rows;
     this.cols = cols;
     const count = Math.min(MAX_CELLS, rows * cols);
@@ -239,12 +266,50 @@ export class LayoutManager {
     this.scheduleEmit();
   }
 
+  // ---- maximize (double-click a cell to fill the grid; double-click again to restore) ----
+  get maximizedIndex(): number | null {
+    return this.maximized;
+  }
+
+  toggleMaximize(index: number): void {
+    this.setMaximized(this.maximized === index ? null : index);
+  }
+
+  private setMaximized(index: number | null): void {
+    this.maximized = index;
+    this.container.classList.toggle('maximized', index !== null);
+    this.entries.forEach((e, i) => e?.wrapper.classList.toggle('maximized', i === index));
+    if (index !== null) this.setActive(index);
+    this.scheduleEmit();
+  }
+
   // ---- series assignment ----
   async assign(index: number, series: Series, imageIndex = 0): Promise<void> {
     const entry = this.ensureCell(index);
     await entry.cell.load(series, imageIndex);
     entry.placeholder.hidden = true;
     this.setActive(index);
+  }
+
+  /**
+   * Dragging one cell's series onto another. If the target already has a series,
+   * they trade places; if the target is empty, the source's series is copied there
+   * (the source keeps showing it too) — cells are never left empty by a drag, since
+   * Cornerstone's stack API isn't meant to be pointed at an empty array (see
+   * clearLocalLibrary's reload-based workaround in main.ts for the same constraint).
+   */
+  async swapCells(sourceIndex: number, targetIndex: number): Promise<void> {
+    if (sourceIndex === targetIndex) return;
+    const source = this.entries[sourceIndex];
+    const target = this.entries[targetIndex];
+    const sourceSeries = source?.cell.series;
+    if (!source || !target || !sourceSeries) return;
+    const sourceImageIndex = source.cell.currentIndex;
+    const targetSeries = target.cell.series;
+    const targetImageIndex = target.cell.currentIndex;
+    await this.assign(targetIndex, sourceSeries, sourceImageIndex);
+    if (targetSeries) await this.assign(sourceIndex, targetSeries, targetImageIndex);
+    this.setActive(targetIndex);
   }
 
   /** Cells that belong to the current layout (in grid order). */

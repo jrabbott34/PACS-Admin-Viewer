@@ -40,9 +40,13 @@ slices, a JPG, a PNG and a 2-page PDF).
   here); Menu → Local library → **Clear local library** deletes it all if you want a clean slate.
 - Open DICOM (uncompressed, RLE, JPEG, JPEG 2000, JPEG-LS), JPG, PNG, GIF, WebP, BMP, PDF and **.zip archives**
   of any of those (dropped or opened), including whole folders.
-- Series list with thumbnails, grouped by study; slices sorted by patient position, then instance number.
-- Viewport layouts: 1x1, 1x2, 2x1, 2x2, 2x3 and 3x3. Click a cell to make it active, then click a series to load
-  it there — or drag a series from the list straight onto any cell. Switching layouts never loses what's loaded.
+- Series list with thumbnails, grouped by study; slices sorted by patient position, then instance number. Drag
+  the handle at its right edge to resize the panel, or click the sidebar icon in the toolbar to hide/show it.
+- Viewport layouts: 1x1, 1x2, 2x1, 2x2, 2x3 and 3x3. Click a cell to make it active (shown with a teal
+  highlight) — its series list entry gets highlighted too — then click a series to load it there, or drag a
+  series from the list straight onto any cell. Switching layouts never loses what's loaded. Drag a cell's own
+  label text onto another cell to swap their series (or copy, if the target is empty). **Double-click a cell**
+  to maximize it to fill the whole grid; double-click again to restore.
 - Per-cell scroll, Window/Level, pan, zoom, invert, flip, rotate, reset. An optional "Link scroll" keeps every
   cell's slice index in sync.
 - Measurement tools, always visible in their own toolbar group (no menu-diving): Length, Angle, Rectangle ROI,
@@ -67,19 +71,21 @@ slices, a JPG, a PNG and a 2-page PDF).
   labeled tool buttons (Navigate: Scroll/W-L/Pan/Zoom; Measure: Length/Angle/Rect/Ellipse/Probe — no dropdown
   to find first), and a compact row of icon buttons for invert, flip, rotate, reset, clear measurements and
   link scroll.
-- A splash screen ("PACS Admin DICOM Viewer", by Jason Abbott) on launch — stays up until you click **Open
-  Viewer**, rather than flashing past automatically.
+- A splash screen ("PACS Admin DICOM Viewer", created by Jason Abbott) on launch — stays up until you click
+  **Open Viewer**, rather than flashing past automatically.
 
 ## Mouse and keyboard
 
 | Input | Action |
 | --- | --- |
 | Click a cell | Make it the active cell (targets toolbar actions, W/L, header, reset, clear) |
+| Double-click a cell | Maximize it to fill the grid; double-click again to restore |
 | Left drag | Active tool (Scroll, Window/Level, Pan, Zoom, or a measurement tool) |
 | Middle drag | Pan |
 | Right drag | Zoom |
 | Wheel | Scroll through the active cell's stack |
 | Drag a series onto a cell | Load that series into that specific cell |
+| Drag a cell's label onto another cell | Swap their series (or copy, if the target is empty) |
 | Arrow keys / Page Up / Page Down | Previous / next image (active cell) |
 | Home / End | First / last image (active cell) |
 | S, W, P, Z | Choose Scroll, Window/Level, Pan or Zoom |

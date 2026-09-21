@@ -27,7 +27,10 @@ const splashStatusEl = $('#splash-status');
 const splashOpenBtn = $<HTMLButtonElement>('#splash-open');
 
 const gridEl = $<HTMLDivElement>('#viewport-grid');
-const seriesEl = $('#series');
+const seriesPanelEl = $('#series');
+const seriesEl = $('#series-list');
+const seriesResizeEl = $('#series-resize');
+const toggleSeriesBtn = $<HTMLButtonElement>('#btn-toggle-series');
 const statusEl = $('#status');
 const emptyEl = $('#empty');
 const dropVeil = $('#dropveil');
@@ -365,9 +368,48 @@ async function clearLocalLibrary(): Promise<void> {
   location.reload();
 }
 
+// ---------- series panel: drag-to-resize, toggle to collapse ----------
+const SERIES_MIN_W = 160;
+const SERIES_MAX_W = 480;
+let seriesWidth = 248;
+let seriesCollapsed = false;
+
+function applySeriesPanel(): void {
+  document.documentElement.style.setProperty('--series-w', seriesCollapsed ? '0px' : `${seriesWidth}px`);
+  seriesPanelEl.classList.toggle('collapsed', seriesCollapsed);
+  toggleSeriesBtn.setAttribute('aria-pressed', String(seriesCollapsed));
+  toggleSeriesBtn.title = seriesCollapsed ? 'Show the series panel' : 'Hide the series panel';
+}
+
+function wireSeriesPanel(): void {
+  toggleSeriesBtn.addEventListener('click', () => {
+    seriesCollapsed = !seriesCollapsed;
+    applySeriesPanel();
+  });
+
+  let dragging = false;
+  seriesResizeEl.addEventListener('mousedown', (e) => {
+    if (seriesCollapsed) return;
+    dragging = true;
+    seriesResizeEl.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    seriesWidth = Math.min(SERIES_MAX_W, Math.max(SERIES_MIN_W, e.clientX));
+    applySeriesPanel();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    seriesResizeEl.classList.remove('dragging');
+  });
+}
+
 // ---------- events ----------
 function wire(): void {
   fillIcons();
+  wireSeriesPanel();
 
   $('#menu-open-files').addEventListener('click', () => fileInput.click());
   $('#menu-open-folder').addEventListener('click', () => folderInput.click());
