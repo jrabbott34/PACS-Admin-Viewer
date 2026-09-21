@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DICOM Viewer</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f2226'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23e3c15f' stroke-width='3'/%3E%3Cpath d='M16 7a9 9 0 0 1 0 18z' fill='%23e3c15f'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="toolbar" role="toolbar" aria-label="Viewer tools">
+        <div class="group">
+          <button id="open-files" type="button">Open files</button>
+          <button id="open-folder" type="button">Open folder</button>
+        </div>
+
+        <div class="group segmented" role="radiogroup" aria-label="Left mouse button tool">
+          <button type="button" data-tool="scroll" title="Scroll (S) — drag to move through the stack">Scroll</button>
+          <button type="button" data-tool="wl" title="Window/Level (W) — drag to adjust">Window/Level</button>
+          <button type="button" data-tool="pan" title="Pan (P)">Pan</button>
+          <button type="button" data-tool="zoom" title="Zoom (Z)">Zoom</button>
+        </div>
+
+        <div class="group wl">
+          <label>W <input id="ww" type="number" step="1" min="1" aria-label="Window width" /></label>
+          <label>L <input id="wc" type="number" step="1" aria-label="Window level" /></label>
+          <select id="preset" aria-label="Window preset"></select>
+        </div>
+
+        <div class="group">
+          <button id="btn-invert" type="button" title="Invert (I)">Invert</button>
+          <button id="btn-flip-h" type="button" title="Flip horizontally">Flip H</button>
+          <button id="btn-flip-v" type="button" title="Flip vertically">Flip V</button>
+          <button id="btn-rotate" type="button" title="Rotate 90° clockwise">Rotate</button>
+          <button id="btn-reset" type="button" title="Reset view (R)">Reset</button>
+        </div>
+
+        <div class="group push">
+          <button id="btn-header" type="button" aria-pressed="false" title="DICOM header (H)">Header</button>
+        </div>
+      </header>
+
+      <aside id="series" class="series" aria-label="Series"></aside>
+
+      <main class="stage">
+        <div id="viewport" class="viewport"></div>
+        <div id="overlay" class="overlay" aria-hidden="true">
+          <div class="ov tl"></div><div class="ov tr"></div><div class="ov bl"></div><div class="ov br"></div>
+        </div>
+        <div id="empty" class="empty">
+          <h1>No images loaded</h1>
+          <p>Drop DICOM files, folders, JPG/PNG images or PDFs anywhere in this window, or use Open.</p>
+          <p class="quiet">Files are read in this browser tab and are not uploaded.</p>
+        </div>
+        <div id="dropveil" class="dropveil" hidden>Drop to open</div>
+      </main>
+
+      <aside id="header-panel" class="header-panel" aria-label="DICOM header" hidden></aside>
+
+      <footer class="status">
+        <span id="status" role="status"></span>
+        <span class="disclaimer">Not for diagnostic use</span>
+      </footer>
+    </div>
+
+    <input id="file-input" type="file" multiple hidden />
+    <input id="folder-input" type="file" webkitdirectory multiple hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
