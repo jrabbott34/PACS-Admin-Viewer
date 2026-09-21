@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PACS Admin DICOM Viewer</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2312161d'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2338bdf8' stroke-width='3'/%3E%3Cpath d='M16 7a9 9 0 0 1 0 18z' fill='%2338bdf8'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="splash" class="splash" role="status" aria-label="Loading PACS Admin DICOM Viewer">
+      <svg class="splash-art" viewBox="0 0 160 160" width="160" height="160" aria-hidden="true">
+        <defs>
+          <linearGradient id="splashSweep" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0" />
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.9" />
+          </linearGradient>
+        </defs>
+        <circle cx="80" cy="80" r="70" fill="none" stroke="#2b323e" stroke-width="2" />
+        <circle cx="80" cy="80" r="54" fill="none" stroke="#2b323e" stroke-width="2" />
+        <circle class="splash-ring" cx="80" cy="80" r="70" fill="none" stroke="url(#splashSweep)" stroke-width="3" stroke-linecap="round" stroke-dasharray="90 350" />
+        <circle class="splash-ring splash-ring-rev" cx="80" cy="80" r="54" fill="none" stroke="url(#splashSweep)" stroke-width="3" stroke-linecap="round" stroke-dasharray="60 280" />
+        <g stroke="#7dd3fc" stroke-width="2" stroke-linecap="round">
+          <path d="M80 22v14M80 124v14M22 80h14M124 80h14" />
+        </g>
+        <circle cx="80" cy="80" r="34" fill="none" stroke="#38bdf8" stroke-width="2" opacity="0.55" />
+        <circle cx="80" cy="80" r="5" fill="#38bdf8" />
+      </svg>
+      <h1 class="splash-title">PACS Admin<br />DICOM Viewer</h1>
+      <p class="splash-status" id="splash-status">Starting…</p>
+    </div>
+    <div id="app">
+      <header class="toolbar" role="toolbar" aria-label="Viewer tools">
+        <div class="group flyout" id="menu-flyout">
+          <button id="menu-trigger" type="button" class="icon-btn" title="Menu" aria-label="Menu">
+            <span data-icon="menu"></span>
+          </button>
+          <div id="menu-panel" class="flyout-panel menu-panel" role="menu" aria-label="Menu">
+            <div class="flyout-section-label">Import</div>
+            <button type="button" class="flyout-item" id="menu-open-files" title="DICOM, JPG, PNG, PDF and .zip archives"><span data-icon="import"></span>Open files…</button>
+            <button type="button" class="flyout-item" id="menu-open-folder"><span data-icon="import"></span>Open folder…</button>
+            <div class="flyout-divider"></div>
+            <div class="flyout-section-label">Export active series</div>
+            <button type="button" class="flyout-item" id="menu-export-png" disabled title="Open a series first"><span data-icon="export"></span>Export image as PNG…</button>
+            <button type="button" class="flyout-item" id="menu-export-jpg" disabled title="Open a series first"><span data-icon="export"></span>Export image as JPG…</button>
+            <button type="button" class="flyout-item" id="menu-export-dicom" disabled title="Open a series first"><span data-icon="export"></span>Export DICOM (.zip)…</button>
+            <div class="flyout-divider"></div>
+            <div class="flyout-section-label">Privacy</div>
+            <button type="button" class="flyout-item" id="menu-anonymize" disabled title="Open a series first"><span data-icon="anonymize"></span>Anonymize &amp; export…</button>
+          </div>
+        </div>
+
+        <div class="group flyout" id="layout-flyout">
+          <button id="layout-trigger" type="button" class="flyout-trigger" title="Viewport layout">
+            <span id="layout-trigger-icon"></span>
+            <span id="layout-trigger-label">1 × 1</span>
+            <span class="caret" data-icon="caret" data-icon-size="12"></span>
+          </button>
+          <div id="layout-panel" class="flyout-panel grid-panel" role="radiogroup" aria-label="Viewport layout"></div>
+        </div>
+
+        <div class="group segmented" role="radiogroup" aria-label="Navigation tool">
+          <button type="button" class="tool-btn" data-tool="scroll" title="Scroll (S) — drag to move through the stack"><span data-icon="scroll"></span>Scroll</button>
+          <button type="button" class="tool-btn" data-tool="wl" title="Window/Level (W) — drag to adjust"><span data-icon="wl"></span>W/L</button>
+          <button type="button" class="tool-btn" data-tool="pan" title="Pan (P)"><span data-icon="pan"></span>Pan</button>
+          <button type="button" class="tool-btn" data-tool="zoom" title="Zoom (Z)"><span data-icon="zoom"></span>Zoom</button>
+        </div>
+
+        <div class="group segmented" role="radiogroup" aria-label="Measurement tool">
+          <button type="button" class="tool-btn" data-tool="length" title="Length — linear measurement"><span data-icon="length"></span>Length</button>
+          <button type="button" class="tool-btn" data-tool="angle" title="Angle"><span data-icon="angle"></span>Angle</button>
+          <button type="button" class="tool-btn" data-tool="rectangleroi" title="Rectangle ROI"><span data-icon="rectangleroi"></span>Rect</button>
+          <button type="button" class="tool-btn" data-tool="ellipticalroi" title="Ellipse ROI"><span data-icon="ellipticalroi"></span>Ellipse</button>
+          <button type="button" class="tool-btn" data-tool="probe" title="Probe — pixel value at a point (Hounsfield units on CT)"><span data-icon="probe"></span>Probe</button>
+        </div>
+
+        <div class="group wl">
+          <label>W <input id="ww" type="number" step="1" min="1" aria-label="Window width" /></label>
+          <label>L <input id="wc" type="number" step="1" aria-label="Window level" /></label>
+          <select id="preset" aria-label="Window preset"></select>
+        </div>
+
+        <div class="group icons">
+          <button id="btn-invert" type="button" class="icon-btn" title="Invert (I)"><span data-icon="invert"></span><span class="sr-only">Invert</span></button>
+          <button id="btn-flip-h" type="button" class="icon-btn" title="Flip horizontally"><span data-icon="flip-h"></span><span class="sr-only">Flip horizontal</span></button>
+          <button id="btn-flip-v" type="button" class="icon-btn" title="Flip vertically"><span data-icon="flip-v"></span><span class="sr-only">Flip vertical</span></button>
+          <button id="btn-rotate" type="button" class="icon-btn" title="Rotate 90° clockwise"><span data-icon="rotate"></span><span class="sr-only">Rotate</span></button>
+          <button id="btn-reset" type="button" class="icon-btn" title="Reset view (R)"><span data-icon="reset"></span><span class="sr-only">Reset</span></button>
+          <button id="btn-clear-meas" type="button" class="icon-btn" title="Remove all measurements from the active viewport"><span data-icon="clear"></span><span class="sr-only">Clear measurements</span></button>
+          <button id="btn-link-scroll" type="button" class="icon-btn" aria-pressed="false" title="Scroll all viewports together"><span data-icon="link"></span><span class="sr-only">Link scroll</span></button>
+        </div>
+
+        <div class="group push">
+          <button id="btn-header" type="button" class="icon-btn" aria-pressed="false" title="DICOM header (H)"><span data-icon="header"></span><span class="sr-only">Header</span></button>
+        </div>
+      </header>
+
+      <aside id="series" class="series" aria-label="Series"></aside>
+
+      <main class="stage">
+        <div id="viewport-grid" class="viewport-grid"></div>
+        <div id="empty" class="empty">
+          <h1>No images loaded</h1>
+          <p>Drop DICOM files, folders, JPG/PNG images or PDFs anywhere in this window, or use Open.</p>
+          <p class="quiet">Files are read in this browser tab and are not uploaded.</p>
+        </div>
+        <div id="dropveil" class="dropveil" hidden>Drop to open</div>
+      </main>
+
+      <aside id="header-panel" class="header-panel" aria-label="DICOM header" hidden></aside>
+
+      <footer class="status">
+        <span id="status" role="status"></span>
+        <span class="disclaimer">Not for diagnostic use</span>
+      </footer>
+    </div>
+
+    <input id="file-input" type="file" multiple hidden />
+    <input id="folder-input" type="file" webkitdirectory multiple hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

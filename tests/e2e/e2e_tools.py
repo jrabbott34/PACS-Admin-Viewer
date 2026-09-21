@@ -1,0 +1,31 @@
+import sys, glob
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b = p.chromium.launch(args=["--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist","--enable-webgl"])
+    pg = b.new_page(viewport={"width":1440,"height":860})
+    errs=[]
+    pg.on("pageerror", lambda e: errs.append(str(e)))
+    pg.on("console", lambda m: errs.append(m.text) if m.type=="error" else None)
+    pg.goto(sys.argv[1]); pg.wait_for_function("window.__viewer !== undefined", timeout=20000)
+    pg.set_input_files("#file-input", sorted(glob.glob("ct/*.dcm"))); pg.wait_for_timeout(4000)
+    S = lambda: pg.evaluate("(()=>{const s=window.__viewer.activeCell.state;return {i:s.index,w:Math.round(s.windowWidth),c:Math.round(s.windowCenter),z:+s.zoom.toFixed(2)}})()")
+    cx, cy = 838, 430
+    print("start          ", S())
+    pg.mouse.move(cx, cy); pg.mouse.down(); pg.mouse.move(cx+80, cy-60, steps=8); pg.mouse.up(); pg.wait_for_timeout(500)
+    print("W/L drag       ", S())
+    pg.select_option("#preset", "default"); pg.wait_for_timeout(500)
+    print("preset Default ", S())
+    pg.keyboard.press("z"); pg.mouse.move(cx, cy); pg.mouse.down(); pg.mouse.move(cx, cy-80, steps=8); pg.mouse.up(); pg.wait_for_timeout(500)
+    print("Zoom drag      ", S())
+    pg.keyboard.press("s"); pg.mouse.move(cx, cy); pg.mouse.down(); pg.mouse.move(cx, cy+120, steps=10); pg.mouse.up(); pg.wait_for_timeout(500)
+    print("Scroll drag    ", S())
+    pg.mouse.move(cx, cy); pg.mouse.wheel(0, 300); pg.wait_for_timeout(600)
+    print("wheel down     ", S())
+    pg.keyboard.press("Home"); pg.wait_for_timeout(400)
+    print("Home           ", S())
+    pg.click("#btn-rotate"); pg.click("#btn-flip-h"); pg.wait_for_timeout(300)
+    pg.click("#btn-reset"); pg.wait_for_timeout(1200)
+    print("Reset          ", S(), "flipH", pg.evaluate("window.__viewer.activeCell.state.flipH"), "rot", pg.evaluate("window.__viewer.activeCell.state.rotation"))
+    pg.screenshot(path="/tmp/t_end.png")
+    print("ERRORS:", errs[:5])
+    b.close()
