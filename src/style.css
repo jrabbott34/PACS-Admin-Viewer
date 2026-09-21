@@ -208,6 +208,25 @@ button[aria-pressed="true"], button.active {
 
 .menu-panel { min-width: 230px; }
 
+.prefs-panel { min-width: 220px; }
+.pref-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pref-item:hover { background: var(--chrome-3); }
+.pref-item input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.prefs-note { margin: 6px 10px 4px; font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+/* Hiding a segmented tool button via a toolbar preference: guaranteed to win over
+   .tool-btn's own display rule regardless of author/UA stylesheet ordering nuances. */
+.tool-btn[hidden] { display: none; }
+
 /* ---------- series list ---------- */
 .series {
   grid-area: series;

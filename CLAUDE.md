@@ -591,6 +591,53 @@ it; a cell playing in the background (not active) shows the "▶ Playing" overla
 cell is active, and the index freezes immediately after. The full pre-existing `tests/e2e/*.py` suite still
 passes.
 
+## Toolbar preferences (declutter, not access control)
+Prompted directly by "admin option for toolbar utilities... or does that get too much into fat client stuff?"
+— and the honest answer is yes, for the access-control reading of that question. A static, no-backend,
+no-auth browser page has no way to actually *enforce* a restriction: anyone using it can reopen devtools and
+flip anything back, so a client-side "admin lock" around tools would be decorative, not a real security
+boundary — actively worse than nothing if someone mistook it for one, given the PHI context this whole app is
+built around. What's genuinely buildable, and what got built instead, is the other reading: **personal
+decluttering**, not permissions. `src/prefs.ts` is a tiny `localStorage` wrapper (`loadHiddenTools()`/
+`saveHiddenTools()`, key `pacs-viewer:hidden-tools`) — deliberately separate from `persist.ts`'s IndexedDB
+image library, since this is UI preference, not patient data, and the two shouldn't be cleared or exported
+together.
+
+- **New flyout** (`#prefs-trigger`/`#prefs-panel`, a "sliders" glyph — chosen over a gear specifically because
+  `wl`'s existing icon is already a circle-with-radiating-ticks, which a gear would have looked nearly
+  identical to) lists all ten `PrimaryTool`s (Navigate: Scroll/W-L/Pan/Zoom/Magnify; Measure: Length/Angle/
+  Rect/Ellipse/Probe) as checkboxes, grouped exactly like the two segmented toolbar groups they control.
+  Unchecking one sets `[data-tool="…"] .hidden = true` immediately (`applyToolVisibility()` in `main.ts`) and
+  persists the change; every other toolbar action (invert, flip, reset, cine, etc.) stays always-visible for
+  now — the tool buttons were the obvious first candidate (ten of them, and a given workflow plausibly never
+  touches several), extending this to the icon row is a natural follow-up if wanted, not a limitation of the
+  approach.
+- **`createFlyout()`'s own panel-click handler only closes on a `<button>` click** (`btn.closest('button')` in
+  `flyout.ts`) — checkboxes wrapped in `<label>` don't match, so toggling several tools in a row correctly
+  keeps the panel open instead of closing after each click. Worth remembering if a future flyout ever needs
+  non-button interactive content: the "closes on inside click" behavior is opt-in per element type, not
+  universal.
+- **Falls back gracefully if the hidden tool was the selected one**: hiding the currently-active primary tool
+  calls `layout.setPrimaryTool()` on the first still-visible tool button rather than leaving the toolbar with
+  nothing highlighted and clicks on the image doing nothing until another tool was manually picked.
+- **`.tool-btn[hidden] { display: none }`** is declared explicitly in `style.css` rather than relying on the
+  native `[hidden]` UA-stylesheet default alone — defensive, since `.tool-btn { display: inline-flex }` is an
+  author-stylesheet rule of comparable specificity and this codebase has already hit exactly this class of bug
+  once before (thumbnail canvas sizing, gotcha #6).
+- **Known minor cosmetic limitation**: `.segmented .tool-btn:first-child`/`:last-child` (the rounded end-caps
+  of a segmented group) key off DOM position, not visual position, so hiding the first or last tool in a group
+  leaves the new visual end without its rounded corner. CSS has no clean "first non-hidden sibling" selector to
+  fix this without `:has()`-based trickery; accepted as-is rather than restructuring the segmented-group CSS
+  for a cosmetic-only edge case.
+
+**Verified** (headless Chromium, persistent context so the localStorage preference survives real reloads):
+unchecking Probe and Magnify hides both toolbar buttons immediately while the panel stays open; other tool
+buttons (Length) remain visible and unaffected; the hidden state survives a full independent page reload, and
+the panel's own checkboxes correctly show unchecked when reopened after that reload (not just the buttons);
+re-checking a box makes the button reappear; selecting Zoom as the primary tool and then hiding it falls back
+to a different, visible tool (`primaryTool` changes and the new tool's button is confirmed visible) rather than
+leaving the toolbar in a stuck state. The full pre-existing `tests/e2e/*.py` suite still passes.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 

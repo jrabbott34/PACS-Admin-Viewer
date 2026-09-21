@@ -73,9 +73,10 @@ slices, a JPG, a PNG and a 2-page PDF).
   series itself is never touched).
 - Per-cell overlays: patient/study, series, image number, slice location and thickness, W/L, zoom.
 - Icon toolbar: a **☰ Menu** and a **Layout** picker that "explode down" from a trigger button, always-visible
-  labeled tool buttons (Navigate: Scroll/W-L/Pan/Zoom; Measure: Length/Angle/Rect/Ellipse/Probe — no dropdown
-  to find first), and a compact row of icon buttons for invert, flip, rotate, reset, clear measurements and
-  link scroll.
+  labeled tool buttons (Navigate: Scroll/W-L/Pan/Zoom/Magnify; Measure: Length/Angle/Rect/Ellipse/Probe — no
+  dropdown to find first), and a compact row of icon buttons for invert, flip, rotate, reset, clear
+  measurements and link scroll. A **toolbar preferences** panel (sliders icon) lets you hide tools you don't
+  use — a personal decluttering preference saved on your machine, not an access-control feature.
 - A splash screen ("PACS Admin DICOM Viewer", created by Jason Abbott) on launch — stays up until you click
   **Open Viewer**, rather than flashing past automatically.
 

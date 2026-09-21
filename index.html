@@ -64,6 +64,29 @@
           <div id="layout-panel" class="flyout-panel grid-panel" role="radiogroup" aria-label="Viewport layout"></div>
         </div>
 
+        <div class="group flyout" id="prefs-flyout">
+          <button id="prefs-trigger" type="button" class="icon-btn" title="Toolbar preferences" aria-label="Toolbar preferences">
+            <span data-icon="settings"></span>
+          </button>
+          <div id="prefs-panel" class="flyout-panel prefs-panel" aria-label="Toolbar preferences">
+            <div class="flyout-section-label">Navigate tools</div>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="scroll" checked />Scroll</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="wl" checked />Window/Level</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="pan" checked />Pan</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="zoom" checked />Zoom</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="magnify" checked />Magnify</label>
+            <div class="flyout-divider"></div>
+            <div class="flyout-section-label">Measurement tools</div>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="length" checked />Length</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="angle" checked />Angle</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="rectangleroi" checked />Rectangle ROI</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="ellipticalroi" checked />Ellipse ROI</label>
+            <label class="pref-item"><input type="checkbox" data-pref-tool="probe" checked />Probe</label>
+            <div class="flyout-divider"></div>
+            <p class="prefs-note">Hides tools you don't use — doesn't restrict anything, just decluttering.</p>
+          </div>
+        </div>
+
         <div class="group segmented" role="radiogroup" aria-label="Navigation tool">
           <button type="button" class="tool-btn" data-tool="scroll" title="Scroll (S) — drag to move through the stack"><span data-icon="scroll"></span>Scroll</button>
           <button type="button" class="tool-btn" data-tool="wl" title="Window/Level (W) — drag to adjust"><span data-icon="wl"></span>W/L</button>

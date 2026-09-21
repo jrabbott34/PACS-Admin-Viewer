@@ -19,6 +19,7 @@ import {
 import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
 import { clearLibrary, deleteBlobs, loadAllBlobs, requestPersistence, saveBlob } from './persist';
 import { CT_PRESETS } from './presets';
+import { loadHiddenTools, saveHiddenTools } from './prefs';
 import type { Series } from './types';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -49,6 +50,8 @@ const cineFpsEl = $<HTMLSelectElement>('#cine-fps');
 const layoutPanelEl = $('#layout-panel');
 const layoutTriggerIconEl = $('#layout-trigger-icon');
 const layoutTriggerLabelEl = $('#layout-trigger-label');
+const prefsTriggerBtn = $<HTMLButtonElement>('#prefs-trigger');
+const prefsPanelEl = $('#prefs-panel');
 
 /**
  * Length, Rectangle ROI and Probe all use the same "drag from one corner/point to
@@ -428,6 +431,44 @@ async function closeStudy(studyUid: string, label: string): Promise<void> {
   location.reload();
 }
 
+// ---------- toolbar preferences: hide tools a given workflow never uses ----------
+/**
+ * Purely cosmetic decluttering, not access control — see prefs.ts. Applies the saved
+ * hidden-tools set to both the actual [data-tool] buttons and the preferences panel's
+ * own checkboxes (so reopening the panel later reflects what's really hidden), and
+ * falls back off a tool that just got hidden while it was the selected primary tool —
+ * otherwise the toolbar would show nothing highlighted and clicking the image would
+ * silently do nothing until another tool was picked.
+ */
+function applyToolVisibility(): void {
+  const hidden = loadHiddenTools();
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
+    b.hidden = hidden.has(b.dataset.tool!);
+  }
+  for (const cb of prefsPanelEl.querySelectorAll<HTMLInputElement>('[data-pref-tool]')) {
+    cb.checked = !hidden.has(cb.dataset.prefTool!);
+  }
+  if (layout && hidden.has(layout.primaryTool)) {
+    const fallback = document.querySelector<HTMLButtonElement>('[data-tool]:not([hidden])');
+    if (fallback) layout.setPrimaryTool(fallback.dataset.tool as PrimaryTool);
+  }
+}
+
+function wirePrefsPanel(): void {
+  createFlyout(prefsTriggerBtn, prefsPanelEl);
+  applyToolVisibility();
+  for (const cb of prefsPanelEl.querySelectorAll<HTMLInputElement>('[data-pref-tool]')) {
+    cb.addEventListener('change', () => {
+      const hidden = loadHiddenTools();
+      const tool = cb.dataset.prefTool!;
+      if (cb.checked) hidden.delete(tool);
+      else hidden.add(tool);
+      saveHiddenTools(hidden);
+      applyToolVisibility();
+    });
+  }
+}
+
 // ---------- series panel: drag-to-resize, toggle to collapse ----------
 const SERIES_MIN_W = 160;
 const SERIES_MAX_W = 480;
@@ -479,6 +520,7 @@ function applyOverlaysToggle(): void {
 function wire(): void {
   fillIcons();
   wireSeriesPanel();
+  wirePrefsPanel();
   toggleOverlaysBtn.addEventListener('click', () => {
     overlaysVisible = !overlaysVisible;
     applyOverlaysToggle();
