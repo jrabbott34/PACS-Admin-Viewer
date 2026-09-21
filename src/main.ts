@@ -65,6 +65,7 @@ const prefsPanelEl = $('#prefs-panel');
 const TOOL_HINTS: Partial<Record<PrimaryTool, string>> = {
   ellipticalroi: 'Ellipse ROI: click the center of the area, then drag outward.',
   angle: 'Angle: drag to draw the first line, then click again to place the second.',
+  label: 'Label: drag from the point to where the text should sit, then type the label.',
 };
 
 let layout: LayoutManager;

@@ -55,12 +55,13 @@ slices, a JPG, a PNG and a 2-page PDF).
   toggle button ("O") hides the corner text (patient/series/W-L/zoom) on every cell at once, for an unobstructed
   look or a clean screenshot.
 - Measurement tools, always visible in their own toolbar group (no menu-diving): Length, Angle, Rectangle ROI,
-  Ellipse ROI, Probe — calibrated to real-world units from the DICOM pixel spacing where available (Probe
-  reports Hounsfield units directly on CT). "Clear" removes all measurements from the active cell. Length,
-  Rectangle and Probe all drag corner-to-corner or click-to-place. **Ellipse and Angle are different**: for
-  Ellipse, click the *center* of what you're measuring and drag outward (not corner-to-corner); for Angle, drag
-  the first line, then click once more to place the second — the status bar shows a reminder when you select
-  either.
+  Ellipse ROI, Probe, **Label** — calibrated to real-world units from the DICOM pixel spacing where available
+  (Probe reports Hounsfield units directly on CT). "Clear" removes all measurements from the active cell.
+  Length, Rectangle and Probe all drag corner-to-corner or click-to-place. **Ellipse and Angle are different**:
+  for Ellipse, click the *center* of what you're measuring and drag outward (not corner-to-corner); for Angle,
+  drag the first line, then click once more to place the second — the status bar shows a reminder when you
+  select either. **Label** drags an arrow to a point, then prompts for text — useful for spine levels (C1, L4,
+  ...) or any other point+text annotation; canceling the prompt discards the arrow.
 - CT window presets, typed W/L values, "Default" (from the DICOM tags) and "Full range".
 - Searchable DICOM header panel for the active cell, including nested sequences and private tags. An **Edit**
   toggle turns on admin mode: click any text/date tag to change it, with every change logged (old value, new

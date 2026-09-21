@@ -15,6 +15,7 @@ export type IconName =
   | 'rectangleroi'
   | 'ellipticalroi'
   | 'probe'
+  | 'label'
   | 'invert'
   | 'flip-h'
   | 'flip-v'
@@ -46,6 +47,7 @@ const PATHS: Record<IconName, string> = {
   rectangleroi: '<rect x="4" y="6" width="16" height="12" rx="1.5"/>',
   ellipticalroi: '<ellipse cx="12" cy="12" rx="8" ry="6"/>',
   probe: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+  label: '<path d="M3 11V5a2 2 0 0 1 2-2h6l10 10-8 8L3 11z"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/>',
   invert: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor" stroke="none"/>',
   'flip-h': '<path d="M12 3v18" stroke-dasharray="3 3"/><path d="M8 9L4 12l4 3M16 9l4 3-4 3"/>',
   'flip-v': '<path d="M3 12h18" stroke-dasharray="3 3"/><path d="M9 8L12 4l3 4M9 16l3 4 3-4"/>',

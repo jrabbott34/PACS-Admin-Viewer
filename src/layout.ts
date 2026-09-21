@@ -14,7 +14,8 @@ export type PrimaryTool =
   | 'angle'
   | 'rectangleroi'
   | 'ellipticalroi'
-  | 'probe';
+  | 'probe'
+  | 'label';
 
 const ENGINE_ID = 'viewer-engine';
 const TOOLGROUP_ID = 'main-tools';
@@ -32,9 +33,17 @@ const TOOL_NAMES: Record<PrimaryTool, string> = {
   rectangleroi: tools.RectangleROITool.toolName,
   ellipticalroi: tools.EllipticalROITool.toolName,
   probe: tools.ProbeTool.toolName,
+  label: tools.ArrowAnnotateTool.toolName,
 };
 
-export const MEASUREMENT_TOOLS: PrimaryTool[] = ['length', 'angle', 'rectangleroi', 'ellipticalroi', 'probe'];
+export const MEASUREMENT_TOOLS: PrimaryTool[] = [
+  'length',
+  'angle',
+  'rectangleroi',
+  'ellipticalroi',
+  'probe',
+  'label',
+];
 
 /** Mouse buttons these tools keep bound to regardless of which tool is primary. */
 const FIXED_BINDINGS: Partial<Record<PrimaryTool, { mouseButton: number }[]>> = {

@@ -668,6 +668,39 @@ behavior as every other menu item); version text reads "Version 0.1.0" (matching
 the fix above); the full pre-existing `tests/e2e/*.py` suite and the cine Escape-stop-all behavior both still
 pass after the keydown guard change.
 
+## Label tool
+Asked about as "spine labeling" — click each vertebra, type its level (C1, L4, etc.). Built the general-purpose
+version rather than a spine-specific one: a sixth Measure tool, "Label", is Cornerstone3D's own built-in
+`ArrowAnnotateTool` (`@cornerstonejs/tools`), wired in exactly like Magnify was — registered in `cs.ts`
+(`tools.addTool(tools.ArrowAnnotateTool)`), added to `PrimaryTool`/`TOOL_NAMES` in `layout.ts`, a
+`data-tool="label"` button in the Measure segmented group. Drag from a point to where the text should sit
+(same corner-to-corner-style drag as Length, not the center-outward gesture Ellipse needs), release, and the
+tool's own default `getTextCallback` pops a native `prompt('Enter your annotation:')` — typing "L4" and
+confirming draws an arrow with that text; **canceling or submitting empty removes the just-drawn annotation
+entirely** (`ArrowAnnotateTool`'s own `_endCallback`: `if (!label) { removeAnnotation(...); }`), so an aborted
+label never leaves an orphaned arrow behind. Added to `MEASUREMENT_TOOLS` alongside the other five, so
+**Clear** removes labels too, and it inherited gotcha #12's fix for free (it plugs into the same generic
+`TOOL_NAMES`-keyed `applyBindings()` loop everything else does, so no special-casing was needed — confirmed by
+drawing a Length measurement immediately after using Label). `TOOL_HINTS` gets an entry for the same reason
+Ellipse/Angle do (gotcha #10) — the drag-then-native-prompt sequence isn't guessable from the button alone.
+Also added to the toolbar-preferences checklist (`#prefs-panel`) alongside the other five Measure tools, so it
+can be hidden the same way.
+
+**Deliberately not built**: auto-incrementing spine levels (pick a starting level, each subsequent click
+labels the next vertebra automatically without retyping). That's genuinely useful for a real spine-reading
+workflow but is custom sequencing logic on top of this, not something `ArrowAnnotateTool` provides — flagged
+to the user as a bigger, separate follow-on rather than folded into this pass. The icon (`label`, a tag/price-tag
+outline with a punched hole) is new and distinct from every other Measure icon, chosen over an arrow glyph
+specifically because "Label" is a general-purpose free-text tool, not exclusively an arrow-pointing one, even
+though the annotation it draws happens to render as an arrow-plus-text.
+
+**Verified** (headless Chromium, `page.on('dialog', ...)` to drive the native `prompt()`): dragging with Label
+selected and confirming the prompt with "L4" draws an annotation whose text includes "L4"; **Clear** removes it;
+dragging then dismissing (canceling) the prompt leaves the SVG layer completely unchanged — no orphaned arrow;
+the status-bar hint shows on selecting Label; drawing a Length measurement immediately after using Label still
+works (gotcha #12 regression check); the Label checkbox is present in the toolbar-preferences panel and hiding
+it correctly hides the toolbar button. The full pre-existing `tests/e2e/*.py` suite still passes.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 
@@ -675,6 +708,13 @@ pass after the keydown guard change.
 
 **Local library persistence. Done**, see above — added between phases 3 and 4 in response to a direct request,
 not part of the original plan.
+
+**Auto-incrementing spine-level labeling** — a faster Label variant for spine reading: pick a starting
+vertebral level, then each subsequent click labels the next one automatically (no retyping "L4", "L3", "L2"...
+by hand). Not started; the general-purpose Label tool (see above) covers the same clinical need today, just
+with a manual type-each-one gesture. Worth building only if the manual version turns out to be too slow for
+real spine-reading volume — the general tool was deliberately chosen first since it's immediately useful for
+any point+text annotation, not spine-specific.
 
 **DICOMweb (QIDO-RS/WADO-RS) Query/Retrieve** — talking to a real PACS instead of local files — is still a
 later option, not started, and explicitly *not* recommended until there's an actual server to point it at.

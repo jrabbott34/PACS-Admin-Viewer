@@ -25,6 +25,7 @@ export function initCornerstone(): Promise<void> {
         tools.RectangleROITool,
         tools.EllipticalROITool,
         tools.ProbeTool,
+        tools.ArrowAnnotateTool,
       ]) {
         tools.addTool(t);
       }
