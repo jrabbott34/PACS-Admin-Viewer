@@ -21,6 +21,11 @@ import type { Series } from './types';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
+const splashEl = $('#splash');
+const splashStatusEl = $('#splash-status');
+const SPLASH_MIN_MS = 700;
+const splashStart = Date.now();
+
 const gridEl = $<HTMLDivElement>('#viewport-grid');
 const seriesEl = $('#series');
 const statusEl = $('#status');
@@ -61,6 +66,16 @@ let thumbRunning = false;
 function setStatus(msg: string, title = ''): void {
   statusEl.textContent = msg;
   statusEl.title = title;
+  if (!splashEl.classList.contains('hide')) splashStatusEl.textContent = msg;
+}
+
+/** Fade the splash out, but never for less than SPLASH_MIN_MS so a fast load doesn't just flash it. */
+function hideSplash(): void {
+  const elapsed = Date.now() - splashStart;
+  setTimeout(() => {
+    splashEl.classList.add('hide');
+    setTimeout(() => splashEl.remove(), 400);
+  }, Math.max(0, SPLASH_MIN_MS - elapsed));
 }
 
 // ---------- overlays (one set of four corners per visible cell) ----------
@@ -504,6 +519,7 @@ async function main(): Promise<void> {
   wire();
   refreshAll();
   setStatus('Ready');
+  hideSplash();
   // Test hook for automated checks.
   (window as unknown as { __viewer: LayoutManager }).__viewer = layout;
 }

@@ -104,12 +104,18 @@ export class ViewportCell {
     this.viewport.render();
   }
 
+  /**
+   * Cornerstone bug: `setViewPresentation({ flipHorizontal: false })` is a no-op when already
+   * flipped. Its own implementation only toggles when the flag is truthy (a "flip now" signal,
+   * not a "set to this value" one), so asking it to set `false` skips the toggle entirely —
+   * a button click can turn a flip on but never back off. Call the underlying toggle directly
+   * instead; passing `true` always flips, which is exactly what a click should do either way.
+   */
   flip(axis: 'h' | 'v'): void {
-    const p = this.viewport.getViewPresentation();
-    this.viewport.setViewPresentation(
-      axis === 'h' ? { flipHorizontal: !p.flipHorizontal } : { flipVertical: !p.flipVertical },
-    );
-    this.viewport.render();
+    const toggle = this.viewport as unknown as {
+      flip: (d: { flipHorizontal?: boolean; flipVertical?: boolean }) => void;
+    };
+    toggle.flip(axis === 'h' ? { flipHorizontal: true } : { flipVertical: true });
   }
 
   rotate(deg: number): void {

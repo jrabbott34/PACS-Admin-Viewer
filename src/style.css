@@ -20,6 +20,45 @@ body {
   overflow: hidden;
 }
 
+/* ---------- splash ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  background: radial-gradient(circle at 50% 38%, #182130 0%, var(--chrome) 70%);
+  transition: opacity 0.35s ease;
+}
+.splash.hide { opacity: 0; pointer-events: none; }
+.splash-art { display: block; }
+.splash-ring {
+  transform-origin: 80px 80px;
+  animation: splash-spin 2.2s linear infinite;
+}
+.splash-ring-rev { animation: splash-spin-rev 1.7s linear infinite; }
+@keyframes splash-spin { to { transform: rotate(360deg); } }
+@keyframes splash-spin-rev { to { transform: rotate(-360deg); } }
+.splash-title {
+  margin: 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.splash-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-ring, .splash-ring-rev { animation: none; }
+}
+
 #app {
   display: grid;
   height: 100%;

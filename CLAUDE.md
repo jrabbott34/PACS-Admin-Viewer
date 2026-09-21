@@ -164,6 +164,15 @@ see the general NOT-verified multi-frame gap below), editing a JPG/PNG/PDF-wrapp
 (zipping is synchronous and in-memory — no chunking/streaming), anonymizing a series with hundreds of instances
 (performance untested).
 
+## Splash screen
+`index.html` has a `#splash` overlay (title, an inline-SVG scan/crosshair motif — no CDN, same rule as
+everywhere else — and a status line mirroring `setStatus()`) shown from first paint. `main.ts` fades it out
+(`hideSplash()`) only once `main()` finishes successfully, never less than `SPLASH_MIN_MS` (700ms) after
+`splashStart`, so a fast load doesn't just flash it. On a `main()` failure the splash is deliberately **not**
+hidden — its status line shows the "Failed to start: …" message instead of leaving it to reveal a half-built,
+non-functional page underneath. Verified: present in the raw HTML before any script runs, still present shortly
+after `DOMContentLoaded`, gone once `window.__viewer` exists.
+
 ## Hard-won gotchas — read before changing anything here
 1. **`useLegacyMetadataProvider: true` in `cs.ts` is required.** With Cornerstone v5's default "naturalized metadata"
    path, every load failed with `no pixel data in NATURALIZED` for our fileManager blobs (the same parsing works in
@@ -181,6 +190,15 @@ see the general NOT-verified multi-frame gap below), editing a JPG/PNG/PDF-wrapp
 6. `loadImageToCanvas` (thumbnails) sets inline pixel sizes on the canvas; `style.css` overrides with `!important`.
 7. `window.__viewer` is a deliberate test hook used by `tests/e2e`. Keep it or update the tests.
 8. `npm audit` reports vulnerabilities in transitive dependencies (not investigated). Fine for a local tool.
+9. **`viewport.setViewPresentation({ flipHorizontal: false })` is a no-op when already flipped.** Same family of
+   bug as #2, different symptom: Cornerstone's own `setViewPresentation` correctly detects the target differs
+   from the current flip and calls its internal `flip()`, but that internal method only toggles when the flag
+   is *truthy* — it treats the argument as "flip now", not "set to this value" — so requesting `false` calls
+   `flip({ flipHorizontal: false })`, which is falsy and does nothing. A flip button wired straight to
+   `setViewPresentation` can turn a flip on but never back off with a second click. `ViewportCell.flip()`
+   bypasses `setViewPresentation` for this and calls the viewport's `flip()` toggle directly (always `true` —
+   it's inherently a toggle, so "set to false" isn't a concept it needs), verified by a pixel round-trip: flip
+   twice and diff against the un-flipped screenshot.
 
 ## Verified (headless Chromium 141, software WebGL)
 Dev and production builds; CT/MR/DX series, sorting, scroll (wheel, drag, keys); W/L drag, presets, typed values;
