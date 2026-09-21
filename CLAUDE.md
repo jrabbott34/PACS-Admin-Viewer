@@ -382,10 +382,18 @@ A batch of direct usability requests, all in `layout.ts` / `main.ts` / `style.cs
   `main.ts` sets that CSS custom property directly (`document.documentElement.style.setProperty`) from a
   `mousedown`/`mousemove`/`mouseup` drag on `#series-resize` (an absolutely-positioned 6px handle at the panel's
   right edge — `.series` needed `position: relative` to anchor it) clamped to `[SERIES_MIN_W, SERIES_MAX_W]` =
-  `[160, 480]`. A new toolbar icon button (`#btn-toggle-series`, the "sidebar" icon) sets `--series-w: 0px` and
-  a `.collapsed` class instead of hiding via `hidden`, so the same variable drives both resize and collapse and
+  `[160, 480]`. The toggle button (`#btn-toggle-series`, the "sidebar" icon) sets `--series-w: 0px` and a
+  `.collapsed` class instead of hiding via `hidden`, so the same variable drives both resize and collapse and
   there's only one code path to keep correct. Collapsing remembers the pre-collapse width (`seriesWidth` isn't
   reset), so un-collapsing restores exactly where it was, not the 248px default.
+  **The toggle button lives beside the sidebar, not in the toolbar**: it's `position: absolute` inside `.stage`
+  (`.sidebar-toggle` in `style.css`, `top: 8px; left: 8px`), not a toolbar `<button>`. `.stage` always starts
+  exactly where `.series` ends in the grid, so the button reads as attached to the panel's edge whether the
+  panel is open, resized, or collapsed — and staying inside `.stage` (rather than `.series`) means it's never
+  swept away when `.series.collapsed` zeroes out the panel's width, so it's always there to un-collapse. It was
+  originally a toolbar icon button (far end of the row); moved on request since a toggle for the thing next to
+  it reads more naturally sitting next to that thing. `z-index: 4` keeps it above `.empty` (`z-index: 2`) and
+  `.dropveil` (`z-index: 3`) so the "no images loaded" placeholder and the drag-drop overlay never cover it.
   **Gotcha hit while building this**: the series list content (`renderSeriesList()`'s target) had to move from
   the outer `#series` aside into a new inner `#series-list` div, because `renderSeriesList()` calls
   `seriesEl.replaceChildren()` on every refresh — if that target were still the outer element, it would wipe
