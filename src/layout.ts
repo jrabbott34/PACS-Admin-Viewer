@@ -88,6 +88,7 @@ export class LayoutManager {
   private listeners = new Set<() => void>();
   private pending = 0;
   private syncing = false;
+  private maximized: number | null = null;
   linkScroll = false;
 
   constructor(
@@ -150,15 +151,40 @@ export class LayoutManager {
 
     wrapper.append(csElement, overlayWrap, placeholder);
     wrapper.addEventListener('mousedown', () => this.setActive(index));
+    wrapper.addEventListener('dblclick', () => this.toggleMaximize(index));
     wrapper.addEventListener('dragover', (e) => {
       if (e.dataTransfer?.types.includes('text/x-series-uid')) e.preventDefault();
     });
     wrapper.addEventListener('drop', (e) => {
       e.preventDefault();
+      const sourceIndex = e.dataTransfer?.getData('text/x-cell-index');
+      if (sourceIndex) {
+        const src = Number(sourceIndex);
+        if (!Number.isNaN(src)) {
+          void this.swapCells(src, index);
+          return;
+        }
+      }
       const uid = e.dataTransfer?.getData('text/x-series-uid');
       const series = uid ? this.getSeriesByUid(uid) : undefined;
       if (series) void this.assign(index, series);
     });
+    // The overlay text doubles as a drag handle for moving/swapping a cell's series
+    // onto another cell — dragging the whole wrapper would fight Cornerstone's own
+    // mouse-based tool interactions (drawing a measurement is also a drag).
+    for (const el of Object.values(overlay)) {
+      el.draggable = true;
+      el.addEventListener('dragstart', (e) => {
+        const series = this.entries[index]?.cell.series;
+        if (!series) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer!.setData('text/x-series-uid', series.uid);
+        e.dataTransfer!.setData('text/x-cell-index', String(index));
+        e.dataTransfer!.effectAllowed = 'move';
+      });
+    }
 
     this.container.append(wrapper);
 
@@ -207,6 +233,7 @@ export class LayoutManager {
   }
 
   setLayout(rows: number, cols: number): void {
+    if (this.maximized !== null) this.setMaximized(null);
     this.rows = rows;
     this.cols = cols;
     const count = Math.min(MAX_CELLS, rows * cols);
@@ -239,12 +266,61 @@ export class LayoutManager {
     this.scheduleEmit();
   }
 
+  // ---- maximize (double-click a cell to fill the grid; double-click again to restore) ----
+  get maximizedIndex(): number | null {
+    return this.maximized;
+  }
+
+  toggleMaximize(index: number): void {
+    this.setMaximized(this.maximized === index ? null : index);
+  }
+
+  private setMaximized(index: number | null): void {
+    this.maximized = index;
+    this.container.classList.toggle('maximized', index !== null);
+    this.entries.forEach((e, i) => e?.wrapper.classList.toggle('maximized', i === index));
+    if (index !== null) this.setActive(index);
+    this.scheduleEmit();
+  }
+
   // ---- series assignment ----
   async assign(index: number, series: Series, imageIndex = 0): Promise<void> {
     const entry = this.ensureCell(index);
     await entry.cell.load(series, imageIndex);
     entry.placeholder.hidden = true;
     this.setActive(index);
+  }
+
+  /**
+   * Dragging one cell's series onto another. If the target already has a series,
+   * they trade places; if the target is empty, the source's series is copied there
+   * (the source keeps showing it too) — cells are never left empty by a drag, since
+   * Cornerstone's stack API isn't meant to be pointed at an empty array (see
+   * clearLocalLibrary's reload-based workaround in main.ts for the same constraint).
+   */
+  async swapCells(sourceIndex: number, targetIndex: number): Promise<void> {
+    if (sourceIndex === targetIndex) return;
+    const source = this.entries[sourceIndex];
+    const target = this.entries[targetIndex];
+    const sourceSeries = source?.cell.series;
+    if (!source || !target || !sourceSeries) return;
+    const sourceImageIndex = source.cell.currentIndex;
+    const targetSeries = target.cell.series;
+    const targetImageIndex = target.cell.currentIndex;
+    await this.assign(targetIndex, sourceSeries, sourceImageIndex);
+    if (targetSeries) await this.assign(sourceIndex, targetSeries, targetImageIndex);
+    this.setActive(targetIndex);
+  }
+
+  /**
+   * Reset window/level, zoom, pan, flip and rotation for every cell in the current
+   * layout that has a series loaded — the single-cell "Reset" button only touches the
+   * active cell, which isn't enough once a study is spread across a 2x2/3x3 layout.
+   * ViewportCell.resetView() already no-ops on an empty cell, so this can run over
+   * every visible entry without filtering first.
+   */
+  async resetAll(): Promise<void> {
+    await Promise.all(this.visibleEntries().map((e) => e.cell.resetView()));
   }
 
   /** Cells that belong to the current layout (in grid order). */
@@ -269,13 +345,29 @@ export class LayoutManager {
     this.scheduleEmit();
   }
 
+  /**
+   * Cornerstone's own ToolGroup.setToolActive() merges the bindings you pass it into
+   * whatever bindings that tool already had — it concatenates prevBindings + newBindings
+   * and dedupes, but never drops one on its own (see setToolActive in
+   * @cornerstonejs/tools' ToolGroup.js). Calling it here every time the primary tool
+   * changes, with a binding list that's meant to *shrink* for whichever tool just lost
+   * Primary, silently fails to shrink anything: Zoom/Pan/Scroll would each keep their
+   * stale Primary-mouse-button binding forever after their one turn as the primary tool,
+   * so after enough tool switches several tools end up simultaneously bound to the left
+   * mouse button and drags stop reliably reaching whichever measurement tool is actually
+   * selected. `setToolPassive(name, { removeAllBindings: true })` is the one call that
+   * genuinely clears a tool's bindings (it filters the existing list down to nothing), so
+   * every tool is fully reset before being reactivated with only the bindings it should
+   * currently have.
+   */
   private applyBindings(): void {
     const { MouseBindings } = tools.Enums;
     for (const key of Object.keys(TOOL_NAMES) as PrimaryTool[]) {
+      const name = TOOL_NAMES[key];
+      this.toolGroup.setToolPassive(name, { removeAllBindings: true });
       const bindings = [...(FIXED_BINDINGS[key] ?? [])];
       if (key === this.primary) bindings.push({ mouseButton: MouseBindings.Primary });
-      if (bindings.length) this.toolGroup.setToolActive(TOOL_NAMES[key], { bindings });
-      else this.toolGroup.setToolPassive(TOOL_NAMES[key]);
+      if (bindings.length) this.toolGroup.setToolActive(name, { bindings });
     }
   }
 

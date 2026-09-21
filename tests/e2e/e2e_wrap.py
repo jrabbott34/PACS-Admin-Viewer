@@ -6,7 +6,7 @@ with sync_playwright() as p:
     logs=[]
     pg.on("console", lambda m: logs.append(f"[{m.type}] {m.text}") if m.type in ("error","warning") else None)
     pg.on("pageerror", lambda e: logs.append(f"[pageerror] {e}"))
-    pg.goto(sys.argv[1]); pg.wait_for_function("window.__viewer !== undefined", timeout=20000)
+    pg.goto(sys.argv[1]); pg.wait_for_function("window.__viewer !== undefined", timeout=20000); pg.click("#splash-open")
     pg.set_input_files("#file-input", ["photo.jpg","scan.png","report.pdf"])
     pg.wait_for_timeout(5000)
     print("status:", pg.inner_text("#status"))

@@ -14,8 +14,10 @@ import {
   orderedSeries,
   refreshSeriesSummary,
   resolveInstanceBlob,
+  sopsForStudy,
 } from './ingest';
 import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
+import { clearLibrary, deleteBlobs, loadAllBlobs, requestPersistence, saveBlob } from './persist';
 import { CT_PRESETS } from './presets';
 import type { Series } from './types';
 
@@ -23,11 +25,13 @@ const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as
 
 const splashEl = $('#splash');
 const splashStatusEl = $('#splash-status');
-const SPLASH_MIN_MS = 700;
-const splashStart = Date.now();
+const splashOpenBtn = $<HTMLButtonElement>('#splash-open');
 
 const gridEl = $<HTMLDivElement>('#viewport-grid');
-const seriesEl = $('#series');
+const seriesPanelEl = $('#series');
+const seriesEl = $('#series-list');
+const seriesResizeEl = $('#series-resize');
+const toggleSeriesBtn = $<HTMLButtonElement>('#btn-toggle-series');
 const statusEl = $('#status');
 const emptyEl = $('#empty');
 const dropVeil = $('#dropveil');
@@ -42,6 +46,20 @@ const layoutPanelEl = $('#layout-panel');
 const layoutTriggerIconEl = $('#layout-trigger-icon');
 const layoutTriggerLabelEl = $('#layout-trigger-label');
 
+/**
+ * Length, Rectangle ROI and Probe all use the same "drag from one corner/point to
+ * another" gesture, so they're self-explanatory. Ellipse and Angle don't — Ellipse
+ * is drawn from its center outward (not corner-to-corner, unlike Rectangle right
+ * next to it), and Angle needs a second click after the first drag to place its
+ * second ray. Surfaced as a status-bar hint on selection, since a toolbar tooltip
+ * requires hovering the button, which a user who already moved to the image won't
+ * see.
+ */
+const TOOL_HINTS: Partial<Record<PrimaryTool, string>> = {
+  ellipticalroi: 'Ellipse ROI: click the center of the area, then drag outward.',
+  angle: 'Angle: drag to draw the first line, then click again to place the second.',
+};
+
 let layout: LayoutManager;
 let header: HeaderPanel;
 let lastPresetSeries: Series | null = null;
@@ -54,13 +72,15 @@ function setStatus(msg: string, title = ''): void {
   if (!splashEl.classList.contains('hide')) splashStatusEl.textContent = msg;
 }
 
-/** Fade the splash out, but never for less than SPLASH_MIN_MS so a fast load doesn't just flash it. */
+/** Reveal the "Open Viewer" button once the app is ready — the splash stays up until clicked. */
+function revealSplashOpen(): void {
+  splashOpenBtn.hidden = false;
+  splashOpenBtn.addEventListener('click', hideSplash, { once: true });
+}
+
 function hideSplash(): void {
-  const elapsed = Date.now() - splashStart;
-  setTimeout(() => {
-    splashEl.classList.add('hide');
-    setTimeout(() => splashEl.remove(), 400);
-  }, Math.max(0, SPLASH_MIN_MS - elapsed));
+  splashEl.classList.add('hide');
+  setTimeout(() => splashEl.remove(), 400);
 }
 
 // ---------- overlays (one set of four corners per visible cell) ----------
@@ -115,6 +135,12 @@ function refreshToolbar(): void {
   const color = !!activeSeries?.isColor;
   const none = !activeSeries;
   wwEl.disabled = wcEl.disabled = presetEl.disabled = color || none;
+  const btnResetAll = $('#btn-reset-all') as HTMLButtonElement;
+  const anyLoaded = layout.visibleEntries().some((e) => e.cell.series);
+  btnResetAll.disabled = !anyLoaded;
+  btnResetAll.title = anyLoaded
+    ? 'Reset window/level, zoom, pan, flip and rotation for every viewport in this layout'
+    : 'Open a series first';
   $('#btn-invert').setAttribute('aria-pressed', String(st.invert));
   $('#btn-flip-h').setAttribute('aria-pressed', String(st.flipH));
   $('#btn-flip-v').setAttribute('aria-pressed', String(st.flipV));
@@ -189,7 +215,16 @@ function renderSeriesList(): void {
       lastStudy = s.studyUid;
       const h = document.createElement('div');
       h.className = 'study-title';
-      h.textContent = [s.patientName, s.studyDescription, s.studyDate].filter(Boolean).join(' · ') || 'Study';
+      const label = document.createElement('span');
+      label.textContent = [s.patientName, s.studyDescription, s.studyDate].filter(Boolean).join(' · ') || 'Study';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'study-close';
+      close.title = 'Close this study (removes it from your local library)';
+      close.setAttribute('aria-label', `Close ${label.textContent}`);
+      close.textContent = '×';
+      close.addEventListener('click', () => void closeStudy(s.studyUid, label.textContent!));
+      h.append(label, close);
       seriesEl.append(h);
     }
     const btn = document.createElement('button');
@@ -291,12 +326,17 @@ function refreshAll(): void {
 }
 
 // ---------- loading files ----------
-async function loadFiles(files: File[]): Promise<void> {
+async function loadFiles(files: File[], opts: { persist?: boolean; label?: string } = {}): Promise<void> {
   if (!files.length) return;
-  setStatus(`Reading ${files.length} file${files.length === 1 ? '' : 's'}…`);
-  const report = await ingest(files, (done, total) => {
-    if (done % 8 === 0 || done === total) setStatus(`Reading files… ${done} / ${total}`);
-  });
+  const persist = opts.persist ?? true;
+  setStatus(opts.label ?? `Reading ${files.length} file${files.length === 1 ? '' : 's'}…`);
+  const report = await ingest(
+    files,
+    (done, total) => {
+      if (done % 8 === 0 || done === total) setStatus(`Reading files… ${done} / ${total}`);
+    },
+    { persist },
+  );
   renderSeriesList();
   if (report.touched.length) emptyEl.hidden = true;
 
@@ -321,12 +361,93 @@ async function loadFiles(files: File[]): Promise<void> {
   }
 }
 
+/** Reload everything saved from a previous session (IndexedDB) back into the library. */
+async function restoreLibrary(): Promise<void> {
+  const saved = await loadAllBlobs();
+  if (!saved.length) return;
+  const files = saved.map(({ sop, blob }) => new File([blob], `${sop}.dcm`, { type: 'application/dicom' }));
+  await loadFiles(files, {
+    persist: false,
+    label: `Restoring ${saved.length} saved image${saved.length === 1 ? '' : 's'} from your local library…`,
+  });
+}
+
+/**
+ * Permanently delete everything in the local library (IndexedDB), then reload the
+ * page — the same clean-slate startup path a fresh launch takes, rather than
+ * hand-rolling viewport-clearing logic (Cornerstone's stack API isn't meant to be
+ * pointed at an empty array).
+ */
+async function clearLocalLibrary(): Promise<void> {
+  if (!confirm('Delete everything in your local library? This cannot be undone.')) return;
+  await clearLibrary();
+  location.reload();
+}
+
+/**
+ * Close one study (all its series) without touching any other study in the local
+ * library. Deletes just that study's blobs from IndexedDB, then reloads — the same
+ * reload-based clean slate as clearLocalLibrary(), just scoped to fewer SOPs, for the
+ * same reason: Cornerstone's StackViewport.setStack() isn't meant to be pointed at an
+ * empty array, so there's no safe way to hand-clear a cell that's showing one of the
+ * study's series in place. restoreLibrary() re-ingests whatever's left in IndexedDB on
+ * the next `main()` run, so every other study reappears exactly as it was; this one
+ * just doesn't.
+ */
+async function closeStudy(studyUid: string, label: string): Promise<void> {
+  const sops = sopsForStudy(studyUid);
+  if (!sops.length) return;
+  if (!confirm(`Close ${label}? It stays out of your local library until you re-import it.`)) return;
+  await deleteBlobs(sops);
+  location.reload();
+}
+
+// ---------- series panel: drag-to-resize, toggle to collapse ----------
+const SERIES_MIN_W = 160;
+const SERIES_MAX_W = 480;
+let seriesWidth = 248;
+let seriesCollapsed = false;
+
+function applySeriesPanel(): void {
+  document.documentElement.style.setProperty('--series-w', seriesCollapsed ? '0px' : `${seriesWidth}px`);
+  seriesPanelEl.classList.toggle('collapsed', seriesCollapsed);
+  toggleSeriesBtn.setAttribute('aria-pressed', String(seriesCollapsed));
+  toggleSeriesBtn.title = seriesCollapsed ? 'Show the series panel' : 'Hide the series panel';
+}
+
+function wireSeriesPanel(): void {
+  toggleSeriesBtn.addEventListener('click', () => {
+    seriesCollapsed = !seriesCollapsed;
+    applySeriesPanel();
+  });
+
+  let dragging = false;
+  seriesResizeEl.addEventListener('mousedown', (e) => {
+    if (seriesCollapsed) return;
+    dragging = true;
+    seriesResizeEl.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    seriesWidth = Math.min(SERIES_MAX_W, Math.max(SERIES_MIN_W, e.clientX));
+    applySeriesPanel();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    seriesResizeEl.classList.remove('dragging');
+  });
+}
+
 // ---------- events ----------
 function wire(): void {
   fillIcons();
+  wireSeriesPanel();
 
   $('#menu-open-files').addEventListener('click', () => fileInput.click());
   $('#menu-open-folder').addEventListener('click', () => folderInput.click());
+  $('#menu-clear-library').addEventListener('click', () => void clearLocalLibrary());
 
   const runExport = (label: string, task: () => Promise<void>) => {
     void task()
@@ -362,7 +483,12 @@ function wire(): void {
   createFlyout($<HTMLButtonElement>('#layout-trigger'), layoutPanelEl);
 
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
-    b.addEventListener('click', () => layout.setPrimaryTool(b.dataset.tool as PrimaryTool));
+    b.addEventListener('click', () => {
+      const tool = b.dataset.tool as PrimaryTool;
+      layout.setPrimaryTool(tool);
+      const hint = TOOL_HINTS[tool];
+      if (hint) setStatus(hint);
+    });
   }
 
   for (const p of LAYOUT_PRESETS) {
@@ -404,6 +530,10 @@ function wire(): void {
   $('#btn-reset').addEventListener('click', () => {
     presetEl.value = 'default';
     void layout.activeCell.resetView();
+  });
+  $('#btn-reset-all').addEventListener('click', () => {
+    presetEl.value = 'default';
+    void layout.resetAll();
   });
   $('#btn-clear-meas').addEventListener('click', () => layout.clearMeasurements());
   linkScrollBtn.addEventListener('click', () => {
@@ -484,6 +614,7 @@ async function main(): Promise<void> {
     library.edited.set(sourceKey.split('?')[0], blob);
     const found = findInstanceByImageId(sourceKey);
     if (found) {
+      void saveBlob(found.instance.sop, blob); // write-through so the edit survives a reload
       void refreshSeriesSummary(found.series, blob).then(() => {
         renderSeriesList();
         refreshOverlays();
@@ -492,9 +623,11 @@ async function main(): Promise<void> {
   });
   fillPresets(null);
   wire();
+  void requestPersistence();
+  await restoreLibrary();
   refreshAll();
   setStatus('Ready');
-  hideSplash();
+  revealSplashOpen();
   // Test hook for automated checks.
   (window as unknown as { __viewer: LayoutManager }).__viewer = layout;
 }

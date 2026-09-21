@@ -10,6 +10,14 @@ pdfjs-dist 6 (**legacy build**). Plain DOM/CSS, no UI framework.
 ## Commands
 `npm install`, `npm run dev` (5173), `npm run build` (tsc + vite build), `npm run preview`.
 
+**Double-click launchers** for non-terminal users: `launch.bat` (Windows) and `launch.command` (macOS/Linux).
+Both: install deps on first run if `node_modules` is missing, kill whatever's already on port 5173 (fixes the
+"port keeps drifting to 5174, 5175…" confusion from running `npm run dev` twice without stopping the first),
+start `vite --port 5173 --strictPort` (fails loudly instead of silently picking a different port, since the
+kill step above already guarantees 5173 is free), wait ~3s, then open the browser to the fixed URL. Verified:
+running the launcher twice in a row (simulating "forgot the first one was still open") correctly frees the
+port and starts fresh on 5173 both times, rather than drifting.
+
 ## Layout
 | File | Role |
 | --- | --- |
@@ -21,6 +29,7 @@ pdfjs-dist 6 (**legacy build**). Plain DOM/CSS, no UI framework.
 | `src/layout.ts` | `LayoutManager`: shared RenderingEngine + one global ToolGroup, the grid of cells, active-cell tracking, layout presets, link-scroll, measurement-tool clearing |
 | `src/header.ts` | dcmjs-based tag reader/editor: the searchable header panel, admin edit mode, change log, regenerate-UID |
 | `src/export.ts` | Export DICOM (zip), export the active cell's frame as PNG/JPG, anonymize-and-export a series |
+| `src/persist.ts` | IndexedDB-backed local library: save/load/clear blobs, `requestPersistence`, `estimateUsage` |
 | `src/icons.ts` | Hand-authored inline SVG icon set (no CDN); `icon()`, `layoutIcon()` (draws an actual rows x cols grid), `fillIcons()` |
 | `src/flyout.ts` | `createFlyout(trigger, panel)`: generic "explode down" popover (menu, layout picker, tool picker) |
 | `src/main.ts` | DOM wiring: toolbar, flyouts, series list, thumbnails, per-cell overlays, drag/drop, shortcuts |
@@ -193,13 +202,27 @@ if the metadata provider resolves `generalSeriesModule.modality` correctly for t
 breaks metadata resolution, this is the first symptom that would show it.
 
 ## Splash screen
-`index.html` has a `#splash` overlay (title, an inline-SVG scan/crosshair motif — no CDN, same rule as
-everywhere else — and a status line mirroring `setStatus()`) shown from first paint. `main.ts` fades it out
-(`hideSplash()`) only once `main()` finishes successfully, never less than `SPLASH_MIN_MS` (700ms) after
-`splashStart`, so a fast load doesn't just flash it. On a `main()` failure the splash is deliberately **not**
-hidden — its status line shows the "Failed to start: …" message instead of leaving it to reveal a half-built,
-non-functional page underneath. Verified: present in the raw HTML before any script runs, still present shortly
-after `DOMContentLoaded`, gone once `window.__viewer` exists.
+`index.html` has a `#splash` overlay (title "PACS Admin DICOM Viewer", a `.splash-byline` ("by Jason Abbott"),
+an inline-SVG scan/crosshair motif — no CDN, same rule as everywhere else — and a status line mirroring
+`setStatus()`) shown from first paint, full-screen and on top (`z-index: 100`, no `pointer-events: none`, so it
+genuinely blocks interaction with the app underneath, not just visually covers it).
+
+**The splash does not auto-hide.** It originally faded out automatically once `main()` finished; changed to a
+manual gate on request (the user wanted to see the app name/branding, not have it flash past). Once `main()`
+succeeds, `revealSplashOpen()` un-hides `#splash-open` ("Open Viewer") — `hideSplash()` only runs when that
+button is clicked (`{ once: true }` listener). On a `main()` failure the button is never revealed and the
+splash stays up with the "Failed to start: …" message, instead of leaving a half-built, non-functional page
+exposed underneath with no explanation.
+
+**This means the app is not interactive until the button is clicked — automated tests must click it.** Every
+`tests/e2e/*.py` script now does `pg.click("#splash-open")` immediately after the
+`window.__viewer !== undefined` wait (the button is already un-hidden by that point in `main()`'s execution
+order — `revealSplashOpen()` runs before `window.__viewer` is assigned). Forgetting this makes every subsequent
+`.click()` on the underlying page hang for the full 30s Playwright timeout with "intercepts pointer events"
+pointing at `#splash` in the call log — that exact symptom means this, not a real bug in whatever was clicked.
+Verified: splash present in the raw HTML before any script runs and still present (with the button visible)
+after `window.__viewer` exists; clicking the button removes it; the full `tests/e2e/*.py` suite passes with the
+click added.
 
 ## Hard-won gotchas — read before changing anything here
 1. **`useLegacyMetadataProvider: true` in `cs.ts` is required.** With Cornerstone v5's default "naturalized metadata"
@@ -227,6 +250,63 @@ after `DOMContentLoaded`, gone once `window.__viewer` exists.
    bypasses `setViewPresentation` for this and calls the viewport's `flip()` toggle directly (always `true` —
    it's inherently a toggle, so "set to false" isn't a concept it needs), verified by a pixel round-trip: flip
    twice and diff against the un-flipped screenshot.
+10. **Ellipse ROI and Angle need a different gesture than Length/Rectangle/Probe, by Cornerstone's own design —
+    not a bug, but easy to mistake for one (a user reported "measuring doesn't work" and this was the actual
+    cause).** Length and Rectangle ROI are corner-to-corner: the drag start and end become two opposite corners
+    of the shape, so `width = |dragDeltaX|`. **`EllipticalROITool._dragDrawCallback` treats the drag start as
+    the ellipse's *center*, not a corner** — `dX`/`dY` are computed as the distance from that start point to
+    the current mouse position and used directly as `rx`/`ry` (the radius), so a corner-to-corner drag the same
+    size as a Rectangle drag produces an ellipse roughly 2x too big in each dimension (confirmed: read the
+    library source down to `drawEllipseByCoordinates.js`, where `radiusX = w/2` is computed correctly from the
+    4 handle points — the bug, if it is one, is upstream in how those points get set during the drag, not in
+    the rendering math). **AngleTool is a genuine two-step gesture**: `addNewAnnotation` creates a 2-point line
+    from the first drag, then `_endCallback` checks `angleStartedNotYetCompleted && points.length === 2` and
+    deliberately does *not* finish — it needs a **second click** afterward to place the third point and
+    complete the angle. A single drag (what Length/Rectangle expect) leaves an incomplete, stuck-looking
+    annotation. Neither of these needed a code fix — both work correctly once you know the gesture — but they
+    do need *telling* the user, since nothing about the cursor or the button communicates it. `TOOL_HINTS` in
+    `main.ts` shows a status-bar message (not just a toolbar tooltip — by the time someone's dragging on the
+    image they're not hovering the button anymore) when either tool is selected: "click the center, then drag
+    outward" for Ellipse, "drag the first line, then click again to place the second" for Angle. Verified: with
+    the correct gesture, Ellipse renders at the expected size (`rx`/`ry` matching the actual drag distance) and
+    Angle completes and adds a text label on the second click.
+11. **`tests/e2e/e2e_comp.py` had two stale issues found while fixing it for the splash gate, both now fixed.**
+    It targeted `#viewport`, an id that hasn't existed since the phase-2 layout refactor introduced
+    `#viewport-grid` and per-cell `.cs-el` divs — this test was never re-run after that refactor, so it silently
+    bit-rotted. Fixed to `.cell.active`. That surfaced a second, more general gotcha: **Playwright's
+    `locator.screenshot()` captures the visual region at that element's bounding box, not just that element's
+    own DOM subtree** — a positioned sibling that visually overlaps (like the per-cell overlay text, a sibling
+    of `.cs-el` within `.cell`, not a descendant) shows up in the screenshot regardless of DOM nesting. The
+    compressed-transfer-syntax pixel-identity check was comparing overlay text (different SeriesDescription per
+    variant: "RLE" vs "J2K" vs "Chest phantom 5mm") as if it were image content, producing false mismatches.
+    Fixed by cropping to the central 70% of the screenshot (`im.crop((w*0.15, h*0.15, w*0.85, h*0.85))`),
+    clear of all four corners' overlay text, before diffing. Worth remembering for any future visual-regression
+    test: screenshot a tighter element, or crop after the fact, whenever overlapping siblings could contaminate
+    the comparison.
+12. **`ToolGroup.setToolActive()` merges bindings, it never drops one — a real bug in our own
+    `LayoutManager.applyBindings()`, not a Cornerstone design quirk like #9/#10.** Reported as: measurement
+    tools (Length, Ellipse, etc.) work the first time, but after zooming, panning, or clicking Reset, they stop
+    responding to drags — the tool button still shows selected/active, but dragging on the image draws nothing.
+    Root cause, confirmed by reading `@cornerstonejs/tools`' `ToolGroup.js`: `setToolActive(name, {bindings})`
+    computes `[...prevBindings, ...newBindings]` and dedupes — it only ever **adds** bindings, never removes
+    ones missing from the new list. `applyBindings()` loops over every tool on each `setPrimaryTool()` call and
+    calls `setToolActive` with a bindings array sized for *that* call (e.g. Zoom gets `[Secondary, Primary]`
+    while it's primary, then just `[Secondary]` once something else is selected) — but because Cornerstone only
+    adds, Zoom's old Primary binding never actually goes away. After a few tool switches, Zoom, Pan and
+    StackScroll all end up simultaneously `Active` and bound to the left mouse button alongside whichever
+    measurement tool is actually selected, and Cornerstone's own dispatch no longer reliably routes the drag to
+    the intended tool. `setToolPassive()`, by contrast, *does* actually clear bindings — but only the ones
+    matching `getDefaultPrimaryBindings()` unless you pass `{ removeAllBindings: true }`, which filters the
+    tool's binding list down to empty unconditionally. Fix: `applyBindings()` now calls
+    `this.toolGroup.setToolPassive(name, { removeAllBindings: true })` for every tool *before* recomputing and
+    (if non-empty) reactivating its bindings, so every tool starts each pass from a genuinely clean slate
+    instead of accreting stale bindings across tool switches. Confirmed via `tg.toolOptions` dumps in headless
+    Chromium: before the fix, `Zoom`'s bindings grew to `[2, 1]` and stayed there even after Zoom stopped being
+    primary; after the fix every non-primary tool's bindings match exactly what `FIXED_BINDINGS` says it should
+    have, with no accumulation across an arbitrary number of switches (verified with 15 randomized 3-tool switch
+    sequences, each followed by a successful Length draw). Also verified the fix doesn't regress the
+    always-available fixed bindings: right-drag zoom and W/L drag both still work regardless of which tool is
+    primary.
 
 ## Verified (headless Chromium 141, software WebGL)
 Dev and production builds; CT/MR/DX series, sorting, scroll (wheel, drag, keys); W/L drag, presets, typed values;
@@ -251,15 +331,205 @@ Real GPU rendering, Firefox/Safari, studies of 500+ slices (memory, load time), 
 multi-frame and enhanced CT/MR (code path exists, no test file), JPEG lossy and HTJ2K, DICOMDIR, very large PDFs
 (capped at 100 pages), layout on narrow screens (series list is simply hidden below 820px).
 
+## Local library (IndexedDB persistence)
+Added after phase 3, outside the original phase numbering: everything imported now survives closing the tab,
+via `src/persist.ts` (a small IndexedDB wrapper — one object store, blobs keyed by SOPInstanceUID). This was a
+deliberate, scoped choice over the two bigger alternatives — a real Query/Retrieve client (nothing to query
+against yet; the user has no PACS/DICOMweb server) and a local PACS server with its own database and background
+process (real infrastructure, not justified by anything asked for so far). IndexedDB gets "still there next
+time" with zero new setup and no service to run, without ruling either bigger option out later.
+
+- `ingest()` takes `{ persist?: boolean }` (default `true`); `register()` calls `saveBlob(sop, blob)`
+  (fire-and-forget) for every newly-registered instance when persisting. Startup restore (`restoreLibrary()` in
+  `main.ts`) re-ingests every saved blob through the exact same `ingest()`/`loadFiles()` path a fresh drop would
+  use, with `persist: false` (so restoring doesn't re-save what was just loaded from storage) — this reuses all
+  existing sniffing/grouping/sorting logic instead of duplicating it, and means a restored library looks and
+  behaves identically to a fresh import.
+- Header edits write through too: `header.onCommit` in `main.ts` calls `saveBlob(instance.sop, blob)` alongside
+  the existing `library.edited` in-memory override, so an edited PatientName (for example) is still edited
+  after a reload, not just for the rest of the session.
+- **Clear local library** (Menu → Local library) clears IndexedDB then calls `location.reload()` — deliberately
+  *not* hand-rolled in-place viewport clearing. Cornerstone's `StackViewport.setStack()` isn't meant to be
+  pointed at an empty array (reads `imageIds[currentImageIdIndex]` unconditionally, which would be `undefined`),
+  so reusing the exact same clean-slate path a fresh launch takes is both simpler and safer than trying to
+  reset five cells' viewport state by hand.
+- `requestPersistence()` (best-effort `navigator.storage.persist()`) is called once on startup so the browser
+  is less likely to evict the library under storage pressure. `estimateUsage()` exists in `persist.ts` but isn't
+  wired into any UI yet — a natural next step if someone wants to see how much space the library is using.
+
+**Verified** (headless Chromium, using a persistent browser context so IndexedDB survives across page reloads
+the way a real browser profile would): import → reload the page → the same series are still in the list;
+editing a header tag (PatientName) → reload → the edit is still there, both in the table and the series list's
+study title; Clear local library → confirmed empty afterward with a clean "Ready" status; zero console errors
+throughout. The full pre-existing `tests/e2e/*.py` suite (each launches its own fresh, non-persistent browser
+context, so no cross-test contamination) still passes. **Not verified**: storage quota exhaustion behavior
+(what happens when the browser refuses to store more), a library large enough that `restoreLibrary()`'s startup
+re-ingest is slow, IndexedDB behavior in a private/incognito window (typically ephemeral or blocked by design —
+the library just won't survive there, which is correct, not a bug to fix).
+
+## Cell interaction: swap-by-drag, maximize, and the series panel
+A batch of direct usability requests, all in `layout.ts` / `main.ts` / `style.css` unless noted:
+
+- **Active-cell color** is its own token, `--select: #2dd4bf` (a cool teal), separate from `--accent`
+  (`#38bdf8`, sky-blue) — they used to be the same color, and the active-cell border didn't stand out enough
+  against all the other accent-colored chrome (buttons, highlights). `.cell.active` uses a 3px inset
+  `box-shadow` plus a soft outer glow, not a `border` (a real border would shift layout by its width; a
+  `box-shadow` doesn't).
+- **Cell-to-cell drag** (drag one viewport's series onto another) reuses the same `text/x-series-uid` payload
+  the series-list-to-cell drop already used, plus a second MIME type, `text/x-cell-index`, set only when the
+  drag originates from a cell — that's how the drop handler in `ensureCell()` tells "drag from the list"
+  (assign, non-destructive) apart from "drag from another cell" (`swapCells()`, see below).
+  **The drag handle is the per-cell overlay text (`.ov` elements), not the whole cell wrapper.** Making the
+  whole `.cell` draggable was considered and rejected: HTML5 drag-and-drop and Cornerstone's own mouse-based
+  tool interactions (drawing a measurement is also a mousedown-drag-mouseup gesture) would fight over the same
+  mousedown, breaking tool drags inside cells. The overlay text corners are a safe, separate hit target
+  (`pointer-events: auto` layered on the otherwise `pointer-events: none` `.cell-overlay`), styled
+  `cursor: grab`.
+  `swapCells(sourceIndex, targetIndex)`: if the target already has a series, they trade places; if the target
+  is empty, the source's series is copied there and the source keeps showing it too — a cell is never left
+  empty by a drag, for the same reason `clearLocalLibrary()` reloads the page instead of hand-clearing a
+  viewport (gotcha: Cornerstone's `StackViewport.setStack()` isn't meant to be pointed at an empty array).
+- **Double-click to maximize/restore** (`toggleMaximize()`/`setMaximized()`): interpreted "double-click and go
+  1x1 in a pop-out window" as an in-page maximize, not a literal second OS window — a second window would need
+  to either re-initialize Cornerstone in a new document or proxy rendering across `window.opener`, both far
+  more machinery than "focus on this one image" actually needs, and double-click-to-maximize/restore is a
+  well-established pattern (video calls, image viewers) that reads correctly without documentation.
+  Deliberately **CSS-only**: `.viewport-grid.maximized .cell:not(.maximized) { display: none }` and
+  `.cell.maximized { grid-column: 1/-1; grid-row: 1/-1 }` — hides every other cell and stretches the target to
+  fill the grid, without calling `setLayout()` or touching any series assignment. This means restoring is just
+  removing the classes; nothing was ever reloaded or reassigned, so there's no risk of losing what was in the
+  other cells (the same "don't touch Cornerstone's stack state for a non-pixel change" principle as the header
+  editor and `clearLocalLibrary`). Picking a new layout while maximized un-maximizes first
+  (`setLayout()` calls `setMaximized(null)` before applying the new grid), so the two features can't leave the
+  UI in a confusing combined state.
+- **Resizable/collapsible series panel**: `#app`'s grid uses `grid-template-columns: var(--series-w, 248px) ...`;
+  `main.ts` sets that CSS custom property directly (`document.documentElement.style.setProperty`) from a
+  `mousedown`/`mousemove`/`mouseup` drag on `#series-resize` (an absolutely-positioned 6px handle at the panel's
+  right edge — `.series` needed `position: relative` to anchor it) clamped to `[SERIES_MIN_W, SERIES_MAX_W]` =
+  `[160, 480]`. The toggle button (`#btn-toggle-series`, the "sidebar" icon) sets `--series-w: 0px` and a
+  `.collapsed` class instead of hiding via `hidden`, so the same variable drives both resize and collapse and
+  there's only one code path to keep correct. Collapsing remembers the pre-collapse width (`seriesWidth` isn't
+  reset), so un-collapsing restores exactly where it was, not the 248px default.
+  **The toggle button's position went through two iterations, both on direct request.** First it lived at the
+  far end of the toolbar's icon row (original design). Moved to `position: absolute` inside `.stage`, flush
+  against the sidebar's edge, so it read as attached to the panel it controls rather than a generic toolbar
+  button — reasoned to be more discoverable, but the user didn't spot it there and reported the button as
+  missing entirely (it was rendering correctly; headless testing confirmed it in every layout/state, so this
+  was a real "user didn't see it," not a bug) until told explicitly where to look. Moved again, per direct
+  instruction, to sit right beside `#menu-trigger` inside `#menu-flyout` (`index.html`) — an ordinary toolbar
+  `<button id="btn-toggle-series" class="icon-btn">` again, now next to the hamburger menu specifically because
+  that's the other control that governs what's visible/available around the viewport, so grouping them reads as
+  "viewer chrome" rather than either floating on the image or lost at the end of a long icon row. The lesson:
+  for a toggle whose whole job is to be find-able, a conventional toolbar position beats a cleverer one users
+  have to be told about — same lesson as the tool-selection flyout-to-always-visible change above, applied to
+  a single button instead of a whole tool group. `wireSeriesPanel()`/`applySeriesPanel()` in `main.ts` still
+  select the button by id, so none of the collapse/resize/aria wiring changed across either move.
+  **Gotcha hit while building this**: the series list content (`renderSeriesList()`'s target) had to move from
+  the outer `#series` aside into a new inner `#series-list` div, because `renderSeriesList()` calls
+  `seriesEl.replaceChildren()` on every refresh — if that target were still the outer element, it would wipe
+  out the resize handle (a sibling-in-waiting) on every series list update. `main.ts`'s `seriesEl` constant now
+  points at `#series-list`; a separate `seriesPanelEl` constant points at the outer `#series` for the
+  resize/collapse logic.
+  A **second gotcha**, caught by testing (not by reasoning about it in advance): giving `.series` a bare
+  `position: relative` (needed as the containing block for the resize handle) made the Layout flyout panel
+  render *underneath* the series panel when open over it — Playwright's `.click()` failed with
+  `#series-list ... intercepts pointer events`. Investigated and it turned out to be a false alarm from the
+  test script itself (it tried to click a layout preset button without first clicking `#layout-trigger` to
+  open that flyout — an invisible, `pointer-events: none` target correctly falls through to whatever's
+  actually visible underneath it, which was the series panel). Worth remembering next time a flyout-related
+  test fails with a "some other element intercepts pointer events" message: check whether the flyout was
+  actually opened first before suspecting a real z-index/stacking bug.
+- **"Reset all" button** (`#btn-reset-all`, `LayoutManager.resetAll()` in `layout.ts`): the existing `#btn-reset`
+  only ever touched `layout.activeCell` (by design — most toolbar actions are per-cell), which stopped being
+  enough once a study is spread across a 2x2/3x3 layout and the user wants every viewport back to its default
+  window/level, zoom, pan, flip and rotation in one click, not one cell at a time. `resetAll()` is just
+  `Promise.all(this.visibleEntries().map(e => e.cell.resetView()))` — `ViewportCell.resetView()` already no-ops
+  on a cell with no series loaded, so it can run over every visible entry unconditionally, populated or not.
+  Styled as a `.tool-btn` (icon + visible "Reset all" label) rather than joining its icon-only neighbors
+  (`#btn-reset`, invert, flip, rotate, etc.) as a bare icon — those are all single-cell actions where a mistake
+  is a one-cell undo, but this one touches every viewport in the layout at once, so it gets the same
+  can't-be-missed treatment as tool selection rather than relying on a tooltip alone to disambiguate it from
+  plain "Reset". Its `disabled` state is intentionally decoupled from the other per-cell action buttons in
+  `refreshToolbar()` (which all key off whether the *active* cell has a series): it's enabled whenever *any*
+  visible cell has a series loaded, since its whole point is to reach cells other than the active one.
+
+**Verified** (headless Chromium): the active cell's `box-shadow` computes to the teal `rgb(45, 212, 191)`;
+dragging one cell's series onto another (synthetic `DragEvent('drop', …)` with both MIME types, same technique
+as the series-list-to-cell drag test) correctly swaps two populated cells' series; double-click maximizes
+(`maximizedIndex` set, `.maximized` class present) and a second double-click restores it
+(`maximizedIndex → null`); dragging `#series-resize` changes `--series-w` by the drag distance (clamped);
+clicking the toggle button collapses to `0px` and restores the previous (resized) width, not the default;
+in a 2x2 layout with two cells independently zoomed away from 1.0×, "Reset all" is disabled with nothing
+loaded, enabled once any cell has a series, and one click puts both cells' zoom back to 1.0× in the same pass.
+The full pre-existing `tests/e2e/*.py` suite still passes.
+
+## Closing a single study
+A direct request: with several patients/exams loaded at once, close just one from the sidebar instead of the
+all-or-nothing Menu → Clear local library. A small "×" button (`.study-close`) sits on each study's header row
+in the series list (`renderSeriesList()` in `main.ts`), next to the patient/study/date label — study-level, not
+per-series, matching the request ("close that study"); a study with several series (DX+CT+MR sharing one
+StudyInstanceUID, same as the synthetic sample set) closes all of them together in one click.
+
+**Why this reloads the page instead of hand-clearing in place** (same reasoning as `clearLocalLibrary()`,
+scoped down): once a study's blob is gone, any cell currently showing one of its series would need to be reset
+to empty, and Cornerstone's `StackViewport.setStack()` still isn't meant to be pointed at an empty array (the
+gotcha behind `clearLocalLibrary()`'s reload and `swapCells()`'s never-leave-empty rule). There's no existing
+"unassign a cell" method in `LayoutManager` and building one just for this would mean being the first code path
+to test that constraint's edge, for a rarely-used action. `closeStudy(studyUid, label)` instead: confirms
+(`confirm()`, same destructive-action pattern as Clear local library), deletes just that study's blobs from
+IndexedDB via `deleteBlobs()` (new in `persist.ts` — `sops.forEach(store.delete)` inside one transaction, as
+opposed to `clearLibrary()`'s whole-store `.clear()`), then reloads. `restoreLibrary()` re-ingests whatever's
+left in IndexedDB on the next `main()` run exactly like a fresh launch, so every *other* study reappears intact
+— only the closed one doesn't come back. `sopsForStudy(studyUid)` (new in `ingest.ts`) collects the SOPs to
+delete; a multi-frame instance's frames all share one SOP (set per source blob, not per frame — see `register()`
+in `ingest.ts`), so the result is de-duplicated through a `Set` rather than the series' instances array directly.
+
+**Verified** (headless Chromium, persistent browser context so IndexedDB survives real reloads): closing a
+study with two series (DX+CT) removes both and the study group disappears from the list, confirmed again after
+a second, fully independent page navigation (not just the immediate post-close reload) — the deletion is
+actually persisted, not just reflected in stale in-memory state; with two distinct studies loaded, closing one
+leaves the other's series list entry and thumbnails completely intact; declining the confirm dialog leaves the
+series list unchanged. The full pre-existing `tests/e2e/*.py` suite still passes.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 
-**Phase 3 — import/export and header editing. Done**, see above. DICOMweb (QIDO/WADO/STOW) — talking to a real
-PACS instead of local files — was never in scope for phase 3 and is still a later option, not started.
+**Phase 3 — import/export and header editing. Done**, see above.
+
+**Local library persistence. Done**, see above — added between phases 3 and 4 in response to a direct request,
+not part of the original plan.
+
+**DICOMweb (QIDO-RS/WADO-RS) Query/Retrieve** — talking to a real PACS instead of local files — is still a
+later option, not started, and explicitly *not* recommended until there's an actual server to point it at.
+Revisit if the user gets access to one.
+
+**A local PACS server** (disk storage + a real database + a background service, enabling multi-device access
+and true C-FIND/C-MOVE-style retrieval) was considered and explicitly deferred in favor of the much lighter
+IndexedDB approach above. Revisit only if a real need for multi-device/multi-user access or archival-scale
+storage shows up — nothing so far has needed it.
 
 **Phase 4 — hanging protocols.** JSON schema: matching rules (modality, body part, laterality, series description,
 prior vs current), a layout, ordered display-set assignments, per-cell defaults (W/L, orientation). A builder that
 saves the current arrangement, and a matcher that picks the best protocol when a study loads.
+
+**Volume rendering (MIP, PET/CT-style fusion) — asked about, not started, and a materially bigger lift than
+anything else in this file so far.** Every cell today is a Cornerstone3D `StackViewport` (`Enums.ViewportType.STACK`
+in `layout.ts`) — a 2D image-by-image stack, which is the right fit for everything built so far but has no
+concept of a 3D volume to render through. MIP and fusion both need Cornerstone3D's *volume* pipeline instead:
+`cornerstoneStreamingImageVolumeLoader`/`cache.createVolume` to assemble a series' slices into one 3D volume
+(only meaningful for a series that's actually a coherent 3D stack — a NucMed/PET series with real geometry, not
+an arbitrary pile of 2D images), an `Enums.ViewportType.ORTHOGRAPHIC` or `VOLUME_3D` viewport with a MIP blend
+mode (`BlendModes.MAXIMUM_INTENSITY_BLEND`) for the MIP case, and for fusion, two volumes resampled onto the
+same grid with a second colormap layered via `viewport.setProperties()`/`addVolumesToViewport` (the actual
+"PET-hot-on-grayscale-CT" look) plus a registration/alignment step if the two series weren't already acquired
+in the same frame of reference. None of that exists in this codebase yet: no volume loader is wired up, `cs.ts`
+only initializes the stack/tools/loader trio, and `LayoutManager` assumes one `StackViewport` per cell
+throughout (`ViewportCell` is stack-shaped end to end — `setStack`, `getCurrentImageIdIndex`, etc.). This would
+be closer to a new phase than an incremental add: a volume-capable cell type alongside (not replacing) the
+stack cells, plus real handling of the PET/CT quantitative correction tags (`RescaleSlope`/`RescaleIntercept`,
+Philips/GE private SUV tags) if the output is meant to be clinically meaningful rather than just visually
+plausible. Worth doing if NucMed/PET-CT is a real, recurring need — not recommended as a quick add given how far
+it sits from the stack-viewport architecture everything else here is built on.
 
 ## Conventions
 Plain sentence-case UI copy; errors say what happened and how to fix it. The viewport stays true black on purpose.
