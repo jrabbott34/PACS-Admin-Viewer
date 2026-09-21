@@ -8,7 +8,7 @@ def px(pg, x, y):
 with sync_playwright() as p:
     b = p.chromium.launch(args=["--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist","--enable-webgl"])
     pg = b.new_page(viewport={"width":1440,"height":860})
-    pg.goto(sys.argv[1]); pg.wait_for_function("window.__viewer !== undefined", timeout=20000)
+    pg.goto(sys.argv[1]); pg.wait_for_function("window.__viewer !== undefined", timeout=20000); pg.click("#splash-open")
     import glob
     pg.set_input_files("#file-input", sorted(glob.glob("ct/*.dcm"))[:3] + ["xr/xr_001.dcm"]); pg.wait_for_timeout(3500)
     for i in pg.query_selector_all(".series-item"):

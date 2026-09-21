@@ -202,13 +202,27 @@ if the metadata provider resolves `generalSeriesModule.modality` correctly for t
 breaks metadata resolution, this is the first symptom that would show it.
 
 ## Splash screen
-`index.html` has a `#splash` overlay (title, an inline-SVG scan/crosshair motif — no CDN, same rule as
-everywhere else — and a status line mirroring `setStatus()`) shown from first paint. `main.ts` fades it out
-(`hideSplash()`) only once `main()` finishes successfully, never less than `SPLASH_MIN_MS` (700ms) after
-`splashStart`, so a fast load doesn't just flash it. On a `main()` failure the splash is deliberately **not**
-hidden — its status line shows the "Failed to start: …" message instead of leaving it to reveal a half-built,
-non-functional page underneath. Verified: present in the raw HTML before any script runs, still present shortly
-after `DOMContentLoaded`, gone once `window.__viewer` exists.
+`index.html` has a `#splash` overlay (title "PACS Admin DICOM Viewer", a `.splash-byline` ("by Jason Abbott"),
+an inline-SVG scan/crosshair motif — no CDN, same rule as everywhere else — and a status line mirroring
+`setStatus()`) shown from first paint, full-screen and on top (`z-index: 100`, no `pointer-events: none`, so it
+genuinely blocks interaction with the app underneath, not just visually covers it).
+
+**The splash does not auto-hide.** It originally faded out automatically once `main()` finished; changed to a
+manual gate on request (the user wanted to see the app name/branding, not have it flash past). Once `main()`
+succeeds, `revealSplashOpen()` un-hides `#splash-open` ("Open Viewer") — `hideSplash()` only runs when that
+button is clicked (`{ once: true }` listener). On a `main()` failure the button is never revealed and the
+splash stays up with the "Failed to start: …" message, instead of leaving a half-built, non-functional page
+exposed underneath with no explanation.
+
+**This means the app is not interactive until the button is clicked — automated tests must click it.** Every
+`tests/e2e/*.py` script now does `pg.click("#splash-open")` immediately after the
+`window.__viewer !== undefined` wait (the button is already un-hidden by that point in `main()`'s execution
+order — `revealSplashOpen()` runs before `window.__viewer` is assigned). Forgetting this makes every subsequent
+`.click()` on the underlying page hang for the full 30s Playwright timeout with "intercepts pointer events"
+pointing at `#splash` in the call log — that exact symptom means this, not a real bug in whatever was clicked.
+Verified: splash present in the raw HTML before any script runs and still present (with the button visible)
+after `window.__viewer` exists; clicking the button removes it; the full `tests/e2e/*.py` suite passes with the
+click added.
 
 ## Hard-won gotchas — read before changing anything here
 1. **`useLegacyMetadataProvider: true` in `cs.ts` is required.** With Cornerstone v5's default "naturalized metadata"
@@ -236,6 +250,39 @@ after `DOMContentLoaded`, gone once `window.__viewer` exists.
    bypasses `setViewPresentation` for this and calls the viewport's `flip()` toggle directly (always `true` —
    it's inherently a toggle, so "set to false" isn't a concept it needs), verified by a pixel round-trip: flip
    twice and diff against the un-flipped screenshot.
+10. **Ellipse ROI and Angle need a different gesture than Length/Rectangle/Probe, by Cornerstone's own design —
+    not a bug, but easy to mistake for one (a user reported "measuring doesn't work" and this was the actual
+    cause).** Length and Rectangle ROI are corner-to-corner: the drag start and end become two opposite corners
+    of the shape, so `width = |dragDeltaX|`. **`EllipticalROITool._dragDrawCallback` treats the drag start as
+    the ellipse's *center*, not a corner** — `dX`/`dY` are computed as the distance from that start point to
+    the current mouse position and used directly as `rx`/`ry` (the radius), so a corner-to-corner drag the same
+    size as a Rectangle drag produces an ellipse roughly 2x too big in each dimension (confirmed: read the
+    library source down to `drawEllipseByCoordinates.js`, where `radiusX = w/2` is computed correctly from the
+    4 handle points — the bug, if it is one, is upstream in how those points get set during the drag, not in
+    the rendering math). **AngleTool is a genuine two-step gesture**: `addNewAnnotation` creates a 2-point line
+    from the first drag, then `_endCallback` checks `angleStartedNotYetCompleted && points.length === 2` and
+    deliberately does *not* finish — it needs a **second click** afterward to place the third point and
+    complete the angle. A single drag (what Length/Rectangle expect) leaves an incomplete, stuck-looking
+    annotation. Neither of these needed a code fix — both work correctly once you know the gesture — but they
+    do need *telling* the user, since nothing about the cursor or the button communicates it. `TOOL_HINTS` in
+    `main.ts` shows a status-bar message (not just a toolbar tooltip — by the time someone's dragging on the
+    image they're not hovering the button anymore) when either tool is selected: "click the center, then drag
+    outward" for Ellipse, "drag the first line, then click again to place the second" for Angle. Verified: with
+    the correct gesture, Ellipse renders at the expected size (`rx`/`ry` matching the actual drag distance) and
+    Angle completes and adds a text label on the second click.
+11. **`tests/e2e/e2e_comp.py` had two stale issues found while fixing it for the splash gate, both now fixed.**
+    It targeted `#viewport`, an id that hasn't existed since the phase-2 layout refactor introduced
+    `#viewport-grid` and per-cell `.cs-el` divs — this test was never re-run after that refactor, so it silently
+    bit-rotted. Fixed to `.cell.active`. That surfaced a second, more general gotcha: **Playwright's
+    `locator.screenshot()` captures the visual region at that element's bounding box, not just that element's
+    own DOM subtree** — a positioned sibling that visually overlaps (like the per-cell overlay text, a sibling
+    of `.cs-el` within `.cell`, not a descendant) shows up in the screenshot regardless of DOM nesting. The
+    compressed-transfer-syntax pixel-identity check was comparing overlay text (different SeriesDescription per
+    variant: "RLE" vs "J2K" vs "Chest phantom 5mm") as if it were image content, producing false mismatches.
+    Fixed by cropping to the central 70% of the screenshot (`im.crop((w*0.15, h*0.15, w*0.85, h*0.85))`),
+    clear of all four corners' overlay text, before diffing. Worth remembering for any future visual-regression
+    test: screenshot a tighter element, or crop after the fact, whenever overlapping siblings could contaminate
+    the comparison.
 
 ## Verified (headless Chromium 141, software WebGL)
 Dev and production builds; CT/MR/DX series, sorting, scroll (wheel, drag, keys); W/L drag, presets, typed values;

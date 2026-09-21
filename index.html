@@ -26,7 +26,9 @@
         <circle cx="80" cy="80" r="5" fill="#38bdf8" />
       </svg>
       <h1 class="splash-title">PACS Admin<br />DICOM Viewer</h1>
+      <p class="splash-byline">by Jason Abbott</p>
       <p class="splash-status" id="splash-status">Starting…</p>
+      <button type="button" id="splash-open" class="splash-open" hidden>Open Viewer</button>
     </div>
     <div id="app">
       <header class="toolbar" role="toolbar" aria-label="Viewer tools">
@@ -70,9 +72,9 @@
 
         <div class="group segmented" role="radiogroup" aria-label="Measurement tool">
           <button type="button" class="tool-btn" data-tool="length" title="Length — linear measurement"><span data-icon="length"></span>Length</button>
-          <button type="button" class="tool-btn" data-tool="angle" title="Angle"><span data-icon="angle"></span>Angle</button>
+          <button type="button" class="tool-btn" data-tool="angle" title="Angle — drag the first line, then click again to place the second"><span data-icon="angle"></span>Angle</button>
           <button type="button" class="tool-btn" data-tool="rectangleroi" title="Rectangle ROI"><span data-icon="rectangleroi"></span>Rect</button>
-          <button type="button" class="tool-btn" data-tool="ellipticalroi" title="Ellipse ROI"><span data-icon="ellipticalroi"></span>Ellipse</button>
+          <button type="button" class="tool-btn" data-tool="ellipticalroi" title="Ellipse ROI — click the center, then drag outward"><span data-icon="ellipticalroi"></span>Ellipse</button>
           <button type="button" class="tool-btn" data-tool="probe" title="Probe — pixel value at a point (Hounsfield units on CT)"><span data-icon="probe"></span>Probe</button>
         </div>
 

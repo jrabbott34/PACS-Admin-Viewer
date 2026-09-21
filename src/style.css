@@ -49,12 +49,34 @@ body {
   letter-spacing: 0.01em;
   color: var(--text);
 }
+.splash-byline {
+  margin: -10px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  letter-spacing: 0.03em;
+}
 .splash-status {
   margin: 0;
   color: var(--muted);
   font-size: 12.5px;
   letter-spacing: 0.02em;
 }
+.splash-open {
+  margin-top: 8px;
+  padding: 0 22px;
+  height: 36px;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 6px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.splash-open:not([hidden]) { opacity: 1; transform: none; }
+.splash-open[hidden] { display: block; visibility: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .splash-ring, .splash-ring-rev { animation: none; }
 }

@@ -24,8 +24,7 @@ const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as
 
 const splashEl = $('#splash');
 const splashStatusEl = $('#splash-status');
-const SPLASH_MIN_MS = 700;
-const splashStart = Date.now();
+const splashOpenBtn = $<HTMLButtonElement>('#splash-open');
 
 const gridEl = $<HTMLDivElement>('#viewport-grid');
 const seriesEl = $('#series');
@@ -43,6 +42,20 @@ const layoutPanelEl = $('#layout-panel');
 const layoutTriggerIconEl = $('#layout-trigger-icon');
 const layoutTriggerLabelEl = $('#layout-trigger-label');
 
+/**
+ * Length, Rectangle ROI and Probe all use the same "drag from one corner/point to
+ * another" gesture, so they're self-explanatory. Ellipse and Angle don't — Ellipse
+ * is drawn from its center outward (not corner-to-corner, unlike Rectangle right
+ * next to it), and Angle needs a second click after the first drag to place its
+ * second ray. Surfaced as a status-bar hint on selection, since a toolbar tooltip
+ * requires hovering the button, which a user who already moved to the image won't
+ * see.
+ */
+const TOOL_HINTS: Partial<Record<PrimaryTool, string>> = {
+  ellipticalroi: 'Ellipse ROI: click the center of the area, then drag outward.',
+  angle: 'Angle: drag to draw the first line, then click again to place the second.',
+};
+
 let layout: LayoutManager;
 let header: HeaderPanel;
 let lastPresetSeries: Series | null = null;
@@ -55,13 +68,15 @@ function setStatus(msg: string, title = ''): void {
   if (!splashEl.classList.contains('hide')) splashStatusEl.textContent = msg;
 }
 
-/** Fade the splash out, but never for less than SPLASH_MIN_MS so a fast load doesn't just flash it. */
+/** Reveal the "Open Viewer" button once the app is ready — the splash stays up until clicked. */
+function revealSplashOpen(): void {
+  splashOpenBtn.hidden = false;
+  splashOpenBtn.addEventListener('click', hideSplash, { once: true });
+}
+
 function hideSplash(): void {
-  const elapsed = Date.now() - splashStart;
-  setTimeout(() => {
-    splashEl.classList.add('hide');
-    setTimeout(() => splashEl.remove(), 400);
-  }, Math.max(0, SPLASH_MIN_MS - elapsed));
+  splashEl.classList.add('hide');
+  setTimeout(() => splashEl.remove(), 400);
 }
 
 // ---------- overlays (one set of four corners per visible cell) ----------
@@ -392,7 +407,12 @@ function wire(): void {
   createFlyout($<HTMLButtonElement>('#layout-trigger'), layoutPanelEl);
 
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-tool]')) {
-    b.addEventListener('click', () => layout.setPrimaryTool(b.dataset.tool as PrimaryTool));
+    b.addEventListener('click', () => {
+      const tool = b.dataset.tool as PrimaryTool;
+      layout.setPrimaryTool(tool);
+      const hint = TOOL_HINTS[tool];
+      if (hint) setStatus(hint);
+    });
   }
 
   for (const p of LAYOUT_PRESETS) {
@@ -527,7 +547,7 @@ async function main(): Promise<void> {
   await restoreLibrary();
   refreshAll();
   setStatus('Ready');
-  hideSplash();
+  revealSplashOpen();
   // Test hook for automated checks.
   (window as unknown as { __viewer: LayoutManager }).__viewer = layout;
 }

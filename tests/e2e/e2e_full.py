@@ -7,7 +7,7 @@ with sync_playwright() as p:
     logs = []
     pg.on("console", lambda m: logs.append(f"[{m.type}] {m.text}") if m.type in ("error",) else None)
     pg.on("pageerror", lambda e: logs.append(f"[pageerror] {e}"))
-    pg.goto(BASE); pg.wait_for_function("window.__viewer !== undefined", timeout=20000)
+    pg.goto(BASE); pg.wait_for_function("window.__viewer !== undefined", timeout=20000); pg.click("#splash-open")
     paths = sorted(glob.glob("ct/*.dcm")) + sorted(glob.glob("mr/*.dcm")) + glob.glob("xr/*.dcm") + ["photo.jpg","scan.png","report.pdf"]
     pg.set_input_files("#file-input", paths)
     pg.wait_for_timeout(6000)

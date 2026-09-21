@@ -6,7 +6,7 @@ with sync_playwright() as p:
     errs=[]
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.on("console", lambda m: errs.append(m.text) if m.type=="error" else None)
-    pg.goto(sys.argv[1]); pg.wait_for_function("window.__viewer !== undefined", timeout=20000)
+    pg.goto(sys.argv[1]); pg.wait_for_function("window.__viewer !== undefined", timeout=20000); pg.click("#splash-open")
     pg.set_input_files("#file-input", sorted(glob.glob("ct/*.dcm"))); pg.wait_for_timeout(4000)
     S = lambda: pg.evaluate("(()=>{const s=window.__viewer.activeCell.state;return {i:s.index,w:Math.round(s.windowWidth),c:Math.round(s.windowCenter),z:+s.zoom.toFixed(2)}})()")
     cx, cy = 838, 430
