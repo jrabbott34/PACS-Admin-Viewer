@@ -96,6 +96,7 @@ slices, a JPG, a PNG and a 2-page PDF).
 | S, W, P, Z, M | Choose Scroll, Window/Level, Pan, Zoom or Magnify |
 | I, R, H, O | Invert, reset, toggle the header panel (active cell); toggle overlays (all cells) |
 | Space | Play/pause cine on the active cell |
+| Esc | Stop cine on every cell (in case one's playing in the background) |
 
 ## Roadmap
 

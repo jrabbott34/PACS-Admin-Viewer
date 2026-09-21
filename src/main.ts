@@ -87,6 +87,16 @@ function hideSplash(): void {
   setTimeout(() => splashEl.remove(), 400);
 }
 
+/**
+ * Cine is per-cell (see gotcha in CLAUDE.md): the Play/Pause button and Space only ever
+ * act on layout.activeCell, so a cell started playing and then left behind by clicking
+ * onto a different cell has no way back to it short of reselecting that exact cell. Esc
+ * is the unconditional panic button — every visible cell's cine, active or not.
+ */
+function stopAllCine(): void {
+  for (const { cell } of layout.visibleEntries()) cell.pause();
+}
+
 // ---------- overlays (one set of four corners per visible cell) ----------
 function refreshOverlays(): void {
   for (const { cell, overlay } of layout.visibleEntries()) {
@@ -124,6 +134,7 @@ function refreshOverlays(): void {
       !s.isColor && st.windowWidth !== undefined && `W ${Math.round(st.windowWidth)}  L ${Math.round(st.windowCenter!)}`,
       `Zoom ${st.zoom.toFixed(2)}×`,
       st.invert && 'Inverted',
+      st.playing && '▶ Playing (Esc to stop all)',
     ]);
   }
 }
@@ -630,6 +641,7 @@ function wire(): void {
     else if (k === 'h' || k === 'H') toggleHeader();
     else if (k === 'o' || k === 'O') toggleOverlaysBtn.click();
     else if (k === ' ') cineBtn.click();
+    else if (k === 'Escape') stopAllCine();
     else handled = false;
     if (handled) e.preventDefault();
   });

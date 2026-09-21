@@ -561,6 +561,24 @@ it's genuinely per-cell state, so it belongs on the object that already owns the
   keys, link-scroll) for what's a fairly minor UX rough edge. Also doesn't pause when a playing cell is scrolled
   out of the current layout (e.g. 2x2 → 1x1 hides cell 2) — consistent with how nothing else in this app pauses
   hidden-cell state either (link scroll keeps syncing hidden cells too).
+- **Bug found within a day of shipping: "I can't seem to stop it once started."** Root cause wasn't the
+  play/pause logic itself (`ViewportCell.play()`/`pause()` were and are correct — a cell playing and paused via
+  the same active cell round-trips perfectly, confirmed by headless test). It's that `#btn-cine` and `Space`
+  both act on `layout.activeCell` exactly like every other single-cell toolbar action (Reset, Invert, flip,
+  ...) — which is fine for those, but cine is the first control whose effect (a background timer) *outlives*
+  the moment of clicking it. Start cine on cell A in a multi-cell layout, then click cell B to look at something
+  else, and the button and Space now both act on cell B — cell A keeps looping with no remaining way to reach it
+  short of clicking back onto that exact cell first, which isn't obvious once you've moved on. Reproduced
+  directly: play cell 0 in a 2x2, click cell 1 active, confirm cell 0 is still `playing === true`, confirm
+  neither the button nor Space touches it. **Fix, two parts**: (1) `Escape` (`stopAllCine()` in `main.ts`) pauses
+  every visible cell's cine unconditionally, regardless of which is active — a panic button that doesn't depend
+  on remembering which cell you started it on; (2) the `br` overlay corner (`refreshOverlays()`) now shows
+  "▶ Playing (Esc to stop all)" on any cell that's playing, active or not, so a cell left running in the
+  background is visibly telling you how to stop it rather than silently looping. Deliberately did *not* make the
+  toolbar button itself "smart" about stopping a different, non-active cell's cine — that would give the same
+  button two different meanings depending on hidden state, breaking the one rule every other toolbar control in
+  this app follows (acts on the active cell, full stop); a dedicated, unconditional shortcut plus a visible cue
+  on the cell itself is simpler and doesn't special-case cine's toolbar semantics.
 
 **Verified** (headless Chromium): disabled with nothing loaded and for a single-image series; enabled for a
 24-image CT series; clicking Play advances `currentIndex` (confirmed non-zero after a short wait at 24fps) and
@@ -568,7 +586,10 @@ sets `aria-pressed="true"`; `Space` pauses it, and the index stops changing whil
 ticks to exceed the frame count wraps back into `[0, total)` and keeps playing rather than stopping; switching
 the active cell to an empty one disables the button, switching back re-enables it (still reflecting that
 specific cell's own play state, not a global one); loading a different series into a playing cell auto-pauses
-it. The full pre-existing `tests/e2e/*.py` suite still passes.
+it; a cell playing in the background (not active) shows the "▶ Playing" overlay hint and is confirmed still
+`playing === true` even after the button/Space target a different cell; `Escape` stops it regardless of which
+cell is active, and the index freezes immediately after. The full pre-existing `tests/e2e/*.py` suite still
+passes.
 
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
