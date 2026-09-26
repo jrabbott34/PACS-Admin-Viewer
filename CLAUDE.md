@@ -742,7 +742,9 @@ replaced without touching the other.
   - `DpapiCredentialStore`;
   - `Services` / `AppPaths`.
 - `desktop/installer`: WiX **5** (`WixToolset.Sdk/5.0.2`; v6+ needs an EULA acceptance step). A per-machine MSI
-  with the `<Files>` glob. Never change `UpgradeCode`.
+  with the `<Files>` glob. Never change `UpgradeCode`. **The Start menu shortcut component's KeyPath must be an HKCU registry
+  value even though the package is per-machine.** An HKLM key path fails ICE38/ICE43/ICE57, which is what broke
+  CI run 1.
 - `.github/workflows/desktop.yml` runs on `windows-latest`: npm build → Core tests → self-contained win-x64
   publish → MSI. It uploads the MSI and the portable folder as artifacts. The version is `major.minor` from
   `package.json` plus `github.run_number`.
