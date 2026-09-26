@@ -33,6 +33,17 @@ Then drop files, folders or **.zip archives** onto the window, or open the **☰
 Open folder**. Try the synthetic data in `samples/` (CT, MR, MONOCHROME1 X-ray, RLE / JPEG 2000 / JPEG-LS CT
 slices, a JPG, a PNG and a 2-page PDF).
 
+## Windows app with Orthanc
+
+`desktop/` wraps this same viewer in a native Windows app (WPF + WebView2). It adds a Connect
+dialog for an Orthanc server, a study browser to search the archive and open studies, credential
+storage (DPAPI, only if you choose to remember the password), logging, and an MSI installer.
+Every viewer tool works exactly as it does here.
+
+Get it from **Actions → Desktop (Windows) → latest green run → Artifacts**. See
+[desktop/README.md](desktop/README.md) for details and [desktop/BRIDGE.md](desktop/BRIDGE.md)
+for how the app and the viewer talk to each other.
+
 ## What works today (phases 1-3, plus a local library)
 
 - **Everything you import is saved in this browser**, so it's still there next time you open the app — you

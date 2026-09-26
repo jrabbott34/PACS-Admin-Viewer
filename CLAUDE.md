@@ -1,7 +1,10 @@
 # DICOM Viewer — project context
 
-Local-first, browser-only DICOM viewer. **Not for diagnostic use** (keep the footer disclaimer). No network calls,
-no telemetry, no CDN assets: images may contain PHI, so everything stays in the tab. Keep it that way.
+Local-first DICOM viewer. **Not for diagnostic use** (keep the footer disclaimer). No telemetry, no CDN assets:
+images may contain PHI. **The browser build makes no network calls**; everything stays in the tab. Keep it that way.
+The one exception is inside the Windows desktop shell (`desktop/`, see "Windows desktop shell" below). There,
+`src/host-bridge.ts` fetches only host-intercepted `https://*.pacs-viewer.example` URLs, which the shell answers
+itself and which never reach the real network from the page. That module is inert outside WebView2.
 
 ## Stack
 Vite 8, TypeScript 5.9, Cornerstone3D 5.10.7 (`core`, `tools`, `dicom-image-loader`), dcmjs 0.52, dicom-parser,
@@ -34,6 +37,8 @@ port and starts fresh on 5173 both times, rather than drifting.
 | `src/flyout.ts` | `createFlyout(trigger, panel)`: generic "explode down" popover (menu, layout picker, tool picker) |
 | `src/main.ts` | DOM wiring: toolbar, flyouts, series list, thumbnails, per-cell overlays, drag/drop, shortcuts |
 | `src/types.ts` | `Series`, `InstanceInfo`, `IngestReport` |
+| `src/host-bridge.ts` | Viewer half of the desktop-shell bridge (`desktop/BRIDGE.md`); no-op in a browser tab |
+| `desktop/` | Windows shell (WPF + WebView2, .NET 8), Orthanc client, MSI; see `desktop/README.md` |
 | `samples/` | Synthetic test data + `generate_samples.py` (needs pydicom, numpy, pillow, reportlab) |
 | `tests/e2e/` | Headless Playwright (Python) checks; run from `samples/` |
 
@@ -701,6 +706,82 @@ the status-bar hint shows on selecting Label; drawing a Length measurement immed
 works (gotcha #12 regression check); the Label checkbox is present in the toolbar-preferences panel and hiding
 it correctly hides the toolbar button. The full pre-existing `tests/e2e/*.py` suite still passes.
 
+## Windows desktop shell (WPF + WebView2) and Orthanc
+On direct request, the plan is a **C#/.NET WPF + WebView2 shell around this viewer, not a native rewrite**. The
+Cornerstone3D viewer stays the imaging engine, unchanged. The shell owns:
+- the native window and packaging (MSI);
+- the Orthanc connection;
+- credentials;
+- logging.
+
+The user's Orthanc is on their LAN and needs a username and password. It is unreachable from the build sandbox.
+User docs, architecture and build steps: `desktop/README.md`. The contract: `desktop/BRIDGE.md`.
+
+**How the pieces meet.** The shell and the viewer share nothing but the BRIDGE.md contract, so either can be
+replaced without touching the other.
+- **Serving the viewer.** The shell serves `dist/`, copied to `viewer\` next to the exe. It uses WebView2's
+  `SetVirtualHostNameToFolderMapping` on `https://app.pacs-viewer.example`, which is worker- and WASM-safe.
+- **Sending a study.** It posts `load-study` with opaque URLs on `https://data.pacs-viewer.example/instances/{id}`.
+- **Answering image requests.** The shell answers those URLs in `WebResourceRequested` by proxying to Orthanc's
+  `/instances/{id}/file` with Basic auth added. **Credentials never enter JavaScript.**
+- **Loading in the viewer.** The viewer fetches, ingests with `persist: false` (archive PHI is never copied into
+  IndexedDB), opens the series and replies `load-result`.
+- **Re-opening a study.** If a study is already open, `IngestReport.alreadyLoaded` lets `loadFiles(..., {open:
+  true})` switch the active cell back to it. A study-UID match wasn't enough: the synthetic DX and CT share a
+  StudyInstanceUID.
+
+**Layout.**
+- `desktop/src/PacsAdminViewer.Core` (net8.0, builds and tests on Linux) contains:
+  - `IImageArchive` and `OrthancArchive`, which use Orthanc's core REST API (`/tools/find`, `/studies/{id}/series`,
+    `/series/{id}`), not the DICOMweb plugin;
+  - `OrthancConnection.TryNormalizeBaseUri`, which accepts a pasted `/app/explorer.html` or `/ui/app/` URL;
+  - `BridgeProtocol`, `LoadRequests`, `SettingsStore`, `ICredentialStore` and `FileAppLog`.
+- `desktop/src/PacsAdminViewer.Desktop` (WPF, Windows only) contains:
+  - `ViewerHost`, the only class that knows the viewer is a web page;
+  - `MainWindow`, `ConnectWindow`, `StudyBrowserWindow`;
+  - `DpapiCredentialStore`;
+  - `Services` / `AppPaths`.
+- `desktop/installer`: WiX **5** (`WixToolset.Sdk/5.0.2`; v6+ needs an EULA acceptance step). A per-machine MSI
+  with the `<Files>` glob. Never change `UpgradeCode`.
+- `.github/workflows/desktop.yml` runs on `windows-latest`: npm build → Core tests → self-contained win-x64
+  publish → MSI. It uploads the MSI and the portable folder as artifacts. The version is `major.minor` from
+  `package.json` plus `github.run_number`.
+
+**Rules and gotchas.**
+- **Never log passwords, Authorization headers or PHI** (patient names/IDs, accession). Log counts, status codes
+  and the server's scheme://host:port only.
+- Settings go in `%APPDATA%\PacsAdminViewer`. The DPAPI password is saved only if "Remember password" is
+  ticked. Logs and the WebView2 profile go in `%LOCALAPPDATA%\PacsAdminViewer`.
+- **The WebView2 user-data folder must be set explicitly.** Its default is next to the exe, which is
+  read-only under Program Files.
+- **Use `.example`, not `.local`, for the fake origins.** `.local` is an mDNS name, which Microsoft warns can
+  stall WebView2 virtual hosts.
+- **WebView2 is a native child window that paints over WPF content (airspace).** `MainWindow.ShowProblem`
+  collapses the WebView to show its error panel.
+- **Browser accelerator keys (F5/Ctrl+R) are off** outside dev mode, because a reload drops every
+  archive-loaded study. For the same reason there are no WPF keyboard shortcuts: the viewer owns the keyboard.
+- **The Study browser is owned by the main window, so it floats above it.** It therefore hides after opening a
+  study, like a worklist, and its X only hides it. `CloseForGood()` runs on main-window close or reconnect.
+- **The build sandbox's Ubuntu .NET SDK has no `Microsoft.NET.Sdk.WindowsDesktop`**, so WPF/XAML only compiles
+  in CI, and `builds.dotnet.microsoft.com` is blocked there. The WPF C# was type-checked locally against
+  `Microsoft.WindowsDesktop.App.Ref` with stubbed XAML fields. Iterate on real compile errors via the Actions
+  logs.
+- Dev: `PACS_VIEWER_DEV_URL=http://localhost:5173` loads `npm run dev` inside the shell (DevTools on).
+  `PACS_VIEWER_DEVTOOLS=1` enables DevTools in a release build.
+
+**Verified.**
+- Core: 64 xUnit tests.
+- The viewer half of the bridge, in headless Chromium with a faked `chrome.webview` (`tests/e2e/e2e_bridge.py`).
+- The WPF project, MSI and publish build on `windows-latest`.
+
+**Not verified.**
+- Running on a real Windows desktop.
+- A real Orthanc.
+- MSI install/upgrade/uninstall.
+- WebView2's real handling of the data-origin proxy and virtual host.
+
+The user needs to try these on their machine.
+
 ## Roadmap
 **Phase 2 — layouts and measurements. Done**, see above.
 
@@ -716,9 +797,10 @@ with a manual type-each-one gesture. Worth building only if the manual version t
 real spine-reading volume — the general tool was deliberately chosen first since it's immediately useful for
 any point+text annotation, not spine-specific.
 
-**DICOMweb (QIDO-RS/WADO-RS) Query/Retrieve** — talking to a real PACS instead of local files — is still a
-later option, not started, and explicitly *not* recommended until there's an actual server to point it at.
-Revisit if the user gets access to one.
+**Archive connectivity: started, via the Windows desktop shell** (see above). It uses Orthanc's REST API
+behind `IImageArchive`. DICOMweb (QIDO-RS/WADO-RS) for other PACS would be a second `IImageArchive`
+implementation, with no shell or viewer changes. Sending edited or anonymized objects back (STOW / Orthanc
+`POST /instances`) is not built.
 
 **A local PACS server** (disk storage + a real database + a background service, enabling multi-device access
 and true C-FIND/C-MOVE-style retrieval) was considered and explicitly deferred in favor of the much lighter
