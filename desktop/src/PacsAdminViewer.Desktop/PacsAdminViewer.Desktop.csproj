@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The native Windows shell: window, Orthanc connection/credentials, study browser, logging,
+       and a WebView2 control hosting the web viewer from ../../../dist as the imaging engine. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>PacsAdminViewer</AssemblyName>
+    <RootNamespace>PacsAdminViewer.Desktop</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- The web viewer's production build (npm run build in the repo root). -->
+    <ViewerDist>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\dist\'))</ViewerDist>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PacsAdminViewer.Core\PacsAdminViewer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <!-- Ship the built viewer next to the exe as viewer\ (served to WebView2 from there). -->
+  <ItemGroup Condition="Exists('$(ViewerDist)index.html')">
+    <Content Include="$(ViewerDist)**\*" LinkBase="viewer" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- A Release build without the viewer would install an empty window; fail loudly instead. -->
+  <Target Name="RequireViewerBuild" BeforeTargets="Build" Condition="'$(Configuration)' == 'Release' AND !Exists('$(ViewerDist)index.html')">
+    <Error Text="The web viewer hasn't been built. Run 'npm ci' and 'npm run build' in the repository root first (expected $(ViewerDist)index.html)." />
+  </Target>
+</Project>

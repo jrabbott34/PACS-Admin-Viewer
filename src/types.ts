@@ -36,5 +36,7 @@ export interface IngestReport {
   touched: Series[];
   instancesAdded: number;
   duplicates: number;
+  /** Already-loaded series that this batch's duplicate instances belong to. */
+  alreadyLoaded: Series[];
   skipped: { name: string; reason: string }[];
 }

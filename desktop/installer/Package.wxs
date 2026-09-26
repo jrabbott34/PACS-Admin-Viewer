@@ -1,0 +1,40 @@
+<!-- Per-machine install to Program Files with a Start menu shortcut. Nothing user-specific is
+     installed: settings, saved credentials, logs and the WebView2 profile are created per user
+     under %APPDATA% / %LOCALAPPDATA% at first run, and are left alone by uninstall. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="PACS Admin Viewer"
+           Manufacturer="Jason Abbott"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="673db2c1-b130-4264-bb38-f437c4a7d11e"
+           Scope="perMachine"
+           Compressed="yes">
+    <!-- Never change UpgradeCode: it's what lets a newer MSI replace an older install. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPCOMMENTS" Value="Local DICOM viewer with Orthanc connectivity. Not for diagnostic use." />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="PACS Admin Viewer" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="PACS Admin Viewer">
+      <Files Directory="INSTALLFOLDER" Include="$(var.AppPublishDir)**" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="AppShortcut"
+                  Name="PACS Admin Viewer"
+                  Description="View DICOM images and browse an Orthanc archive"
+                  Target="[INSTALLFOLDER]PacsAdminViewer.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon" />
+        <RegistryValue Root="HKLM" Key="Software\PACS Admin Viewer" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

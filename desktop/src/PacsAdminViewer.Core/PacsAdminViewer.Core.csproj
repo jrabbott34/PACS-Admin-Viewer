@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-neutral on purpose: everything here builds and is unit-tested on Linux. The
+       Windows-only pieces (WPF, WebView2, DPAPI) live in PacsAdminViewer.Desktop. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>PacsAdminViewer.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PacsAdminViewer.Core.Tests" />
+  </ItemGroup>
+</Project>

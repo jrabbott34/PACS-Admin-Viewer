@@ -1,0 +1,96 @@
+<Window x:Class="PacsAdminViewer.Desktop.StudyBrowserWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Study browser" Icon="Assets/app.ico"
+        Width="1040" Height="660" MinWidth="700" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="170" MinHeight="90" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Search -->
+    <WrapPanel Grid.Row="0" Margin="0,0,0,10">
+      <WrapPanel.Resources>
+        <Style TargetType="Label">
+          <Setter Property="Padding" Value="0,0,6,0" />
+          <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="TextBox">
+          <Setter Property="Width" Value="150" />
+          <Setter Property="Padding" Value="2" />
+          <Setter Property="Margin" Value="0,0,14,6" />
+          <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="DatePicker">
+          <Setter Property="Width" Value="120" />
+          <Setter Property="Margin" Value="0,0,8,6" />
+          <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+      </WrapPanel.Resources>
+      <Label Content="Patient _name" Target="{Binding ElementName=NameBox}" />
+      <TextBox x:Name="NameBox" />
+      <Label Content="Patient _ID" Target="{Binding ElementName=IdBox}" />
+      <TextBox x:Name="IdBox" Width="110" />
+      <Label Content="A_ccession" Target="{Binding ElementName=AccessionBox}" />
+      <TextBox x:Name="AccessionBox" Width="110" />
+      <Label Content="Study _date" Target="{Binding ElementName=FromPicker}" />
+      <DatePicker x:Name="FromPicker" ToolTip="From (inclusive)" />
+      <Label Content="to" />
+      <DatePicker x:Name="ToPicker" ToolTip="To (inclusive)" Margin="0,0,14,6" />
+      <Button x:Name="SearchButton" Content="_Search" IsDefault="True" MinWidth="80" Padding="10,3" Margin="0,0,6,6" Click="Search_Click" />
+      <Button Content="C_lear" MinWidth="60" Padding="10,3" Margin="0,0,0,6" Click="Clear_Click" />
+    </WrapPanel>
+
+    <!-- Studies -->
+    <DataGrid x:Name="StudiesGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+              SelectionMode="Single" SelectionUnit="FullRow" HeadersVisibility="Column"
+              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E5E5E5"
+              CanUserAddRows="False" CanUserDeleteRows="False"
+              SelectionChanged="Studies_SelectionChanged" MouseDoubleClick="Studies_DoubleClick" PreviewKeyDown="Studies_KeyDown"
+              AutomationProperties.Name="Studies">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Patient" Binding="{Binding PatientName}" Width="2*" />
+        <DataGridTextColumn Header="Patient ID" Binding="{Binding PatientId}" Width="*" />
+        <DataGridTextColumn Header="Date" Binding="{Binding StudyDate, StringFormat=yyyy-MM-dd}" Width="90" />
+        <DataGridTextColumn Header="Description" Binding="{Binding StudyDescription}" Width="2*" />
+        <DataGridTextColumn Header="Accession" Binding="{Binding AccessionNumber}" Width="*" />
+        <DataGridTextColumn Header="Series" Binding="{Binding SeriesCount}" Width="60" />
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <GridSplitter Grid.Row="2" Height="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
+
+    <!-- Series of the selected study -->
+    <DataGrid x:Name="SeriesGrid" Grid.Row="3" AutoGenerateColumns="False" IsReadOnly="True"
+              SelectionMode="Extended" SelectionUnit="FullRow" HeadersVisibility="Column"
+              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E5E5E5"
+              CanUserAddRows="False" CanUserDeleteRows="False"
+              SelectionChanged="Series_SelectionChanged" MouseDoubleClick="Series_DoubleClick" PreviewKeyDown="Series_KeyDown"
+              AutomationProperties.Name="Series of the selected study">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="#" Binding="{Binding SeriesNumber}" Width="50" />
+        <DataGridTextColumn Header="Modality" Binding="{Binding Modality}" Width="80" />
+        <DataGridTextColumn Header="Description" Binding="{Binding SeriesDescription}" Width="*" />
+        <DataGridTextColumn Header="Images" Binding="{Binding InstanceCount}" Width="70" />
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <Grid Grid.Row="4" Margin="0,10,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="OpenStudyButton" Content="_Open study" IsEnabled="False" MinWidth="100" Padding="10,3" Margin="0,0,8,0" Click="OpenStudy_Click" />
+        <Button x:Name="OpenSeriesButton" Content="Open selected s_eries" IsEnabled="False" MinWidth="100" Padding="10,3" Margin="0,0,8,0" Click="OpenSeries_Click" />
+        <Button Content="Close" IsCancel="True" MinWidth="80" Padding="10,3" Click="Close_Click" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

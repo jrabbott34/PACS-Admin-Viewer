@@ -184,14 +184,16 @@ async function register(
   }
 
   const sop = ds.string('x00080018') ?? `${c.name}:${c.blob.size}`;
+  const seriesUid = ds.string('x0020000e') ?? `no-series-uid:${c.name}`;
   if (library.sops.has(sop)) {
     report.duplicates++;
+    const existing = library.series.get(seriesUid);
+    if (existing && !report.alreadyLoaded.includes(existing)) report.alreadyLoaded.push(existing);
     return;
   }
   library.sops.add(sop);
   if (persist) void saveBlob(sop, c.blob);
 
-  const seriesUid = ds.string('x0020000e') ?? `no-series-uid:${c.name}`;
   const photometric = ds.string('x00280004') ?? 'MONOCHROME2';
   let series = library.series.get(seriesUid);
   if (!series) {
@@ -265,7 +267,7 @@ export async function ingest(
   opts: { persist?: boolean } = {},
 ): Promise<IngestReport> {
   const persist = opts.persist ?? true;
-  const report: IngestReport = { touched: [], instancesAdded: 0, duplicates: 0, skipped: [] };
+  const report: IngestReport = { touched: [], instancesAdded: 0, duplicates: 0, alreadyLoaded: [], skipped: [] };
   const touched = new Set<Series>();
   const expanded = await expandArchives(files);
   const candidates = expanded.filter((f) => !IGNORED_NAMES.has(f.name.toLowerCase()));

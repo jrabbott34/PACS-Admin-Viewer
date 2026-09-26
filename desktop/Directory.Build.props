@@ -1,0 +1,13 @@
+<Project>
+  <!-- .NET projects only; the WiX installer project sets its own version. -->
+  <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- CI overrides this with major.minor from package.json plus the build number (the MSI needs a new version every build). -->
+    <Version Condition="'$(Version)' == ''">0.1.0</Version>
+    <Company>Jason Abbott</Company>
+    <Product>PACS Admin DICOM Viewer</Product>
+    <Copyright>Jason Abbott</Copyright>
+  </PropertyGroup>
+</Project>

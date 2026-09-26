@@ -1,0 +1,16 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <!-- Windows installer for the published shell (dotnet publish ... -o ../artifacts/publish).
+       Built by .github/workflows/desktop.yml; locally: publish first, then `dotnet build` this. -->
+  <PropertyGroup>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
+    <AppPublishDir Condition="'$(AppPublishDir)' == ''">$(MSBuildThisFileDirectory)..\artifacts\publish\</AppPublishDir>
+    <AppPublishDir>$([System.IO.Path]::GetFullPath('$(AppPublishDir)'))</AppPublishDir>
+    <OutputName>PacsAdminViewer-$(ProductVersion)-x64</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <DefineConstants>ProductVersion=$(ProductVersion);AppPublishDir=$(AppPublishDir);IconPath=$(MSBuildThisFileDirectory)..\src\PacsAdminViewer.Desktop\Assets\app.ico</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="RequirePublishedApp" BeforeTargets="Build" Condition="!Exists('$(AppPublishDir)PacsAdminViewer.exe')">
+    <Error Text="Nothing to package: $(AppPublishDir)PacsAdminViewer.exe doesn't exist. Run dotnet publish for PacsAdminViewer.Desktop first (see desktop/README.md)." />
+  </Target>
+</Project>

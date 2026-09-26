@@ -20,7 +20,8 @@ import { LAYOUT_PRESETS, LayoutManager, type PrimaryTool } from './layout';
 import { clearLibrary, deleteBlobs, loadAllBlobs, requestPersistence, saveBlob } from './persist';
 import { CT_PRESETS } from './presets';
 import { loadHiddenTools, saveHiddenTools } from './prefs';
-import type { Series } from './types';
+import { initHostBridge } from './host-bridge';
+import type { IngestReport, Series } from './types';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -356,8 +357,18 @@ function refreshAll(): void {
 }
 
 // ---------- loading files ----------
-async function loadFiles(files: File[], opts: { persist?: boolean; label?: string } = {}): Promise<void> {
-  if (!files.length) return;
+interface LoadOptions {
+  persist?: boolean;
+  label?: string;
+  /**
+   * Open the loaded series in the active cell even if it already shows something — and if
+   * every file was already loaded (re-opening the same study), open the series they belong to.
+   */
+  open?: boolean;
+}
+
+async function loadFiles(files: File[], opts: LoadOptions = {}): Promise<IngestReport | undefined> {
+  if (!files.length) return undefined;
   const persist = opts.persist ?? true;
   setStatus(opts.label ?? `Reading ${files.length} file${files.length === 1 ? '' : 's'}…`);
   const report = await ingest(
@@ -382,13 +393,15 @@ async function loadFiles(files: File[], opts: { persist?: boolean; label?: strin
     .join('\n');
   setStatus(parts.join(' · ') || 'Nothing to load', detail);
 
-  // Open the first new series into the active cell if it's still empty.
-  if (!layout.activeCell.series && report.touched.length) {
-    const first = orderedSeries().find((s) => report.touched.includes(s));
-    if (first) await pickSeries(first);
-  } else {
-    markCurrentSeries();
-  }
+  // Open the first new series into the active cell if it's still empty (or if asked to).
+  const target = opts.open
+    ? orderedSeries().find((s) => report.touched.includes(s) || report.alreadyLoaded.includes(s))
+    : !layout.activeCell.series
+      ? orderedSeries().find((s) => report.touched.includes(s))
+      : undefined;
+  if (target) await pickSeries(target);
+  else markCurrentSeries();
+  return report;
 }
 
 /** Reload everything saved from a previous session (IndexedDB) back into the library. */
@@ -732,6 +745,26 @@ async function main(): Promise<void> {
   revealSplashOpen();
   // Test hook for automated checks.
   (window as unknown as { __viewer: LayoutManager }).__viewer = layout;
+
+  // No-op in a normal browser tab; only active inside the Windows desktop shell (WebView2).
+  initHostBridge({
+    appVersion: __APP_VERSION__,
+    status: (msg) => setStatus(msg),
+    load: async (files, { label }) => {
+      // The user explicitly opened a study in the native shell; don't make them also
+      // dismiss the splash to see it.
+      if (!splashEl.classList.contains('hide')) hideSplash();
+      // persist: false — the archive is the source of truth; don't silently copy PHI
+      // into this machine's browser storage.
+      const report = await loadFiles(files, { persist: false, label, open: true });
+      return {
+        images: report?.instancesAdded ?? 0,
+        duplicates: report?.duplicates ?? 0,
+        series: report?.touched.length ?? 0,
+        skipped: report?.skipped.length ?? 0,
+      };
+    },
+  });
 }
 
 main().catch((e) => {

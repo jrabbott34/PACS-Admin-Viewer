@@ -1,0 +1,80 @@
+# Builds the Windows desktop app: the web viewer (npm), the WPF + WebView2 shell (dotnet), and
+# an MSI (WiX). Download the results from the run's "Artifacts" section.
+name: Desktop (Windows)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build the web viewer
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Version
+        # major.minor from package.json + the build number: every MSI must have a higher
+        # version than the last for Windows to upgrade in place.
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version.Split('.')
+          $version = "$($v[0]).$($v[1]).${{ github.run_number }}"
+          "APP_VERSION=$version" >> $env:GITHUB_ENV
+          Write-Host "Building $version"
+
+      - name: Test the core library
+        run: dotnet test desktop/tests/PacsAdminViewer.Core.Tests/PacsAdminViewer.Core.Tests.csproj -c Release
+
+      - name: Publish the app
+        run: >
+          dotnet publish desktop/src/PacsAdminViewer.Desktop/PacsAdminViewer.Desktop.csproj
+          -c Release -r win-x64 --self-contained
+          -p:Version=${{ env.APP_VERSION }}
+          -o desktop/artifacts/publish
+
+      - name: Check the viewer was bundled
+        run: |
+          foreach ($f in 'PacsAdminViewer.exe', 'WebView2Loader.dll', 'viewer/index.html') {
+            if (-not (Test-Path "desktop/artifacts/publish/$f")) { throw "Missing from the published app: $f" }
+          }
+
+      - name: Build the MSI
+        run: >
+          dotnet build desktop/installer/PacsAdminViewer.Installer.wixproj
+          -c Release
+          -p:ProductVersion=${{ env.APP_VERSION }}
+          -p:AppPublishDir=${{ github.workspace }}/desktop/artifacts/publish/
+          -o desktop/artifacts/msi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PacsAdminViewer-${{ env.APP_VERSION }}-msi
+          path: desktop/artifacts/msi/*.msi
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PacsAdminViewer-${{ env.APP_VERSION }}-portable-x64
+          path: desktop/artifacts/publish/
+          if-no-files-found: error

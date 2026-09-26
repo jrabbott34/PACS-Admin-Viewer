@@ -1,2 +1,7 @@
 node_modules
 dist
+desktop/**/bin/
+desktop/**/obj/
+desktop/artifacts/
+*.user
+.vs/
