@@ -33,7 +33,9 @@
                   Target="[INSTALLFOLDER]PacsAdminViewer.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="AppIcon" />
-        <RegistryValue Root="HKLM" Key="Software\PACS Admin Viewer" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+        <!-- Windows Installer rules (ICE38/43/57) require a shortcut component's key path under HKCU,
+             even in a per-machine install. It's only a marker value. -->
+        <RegistryValue Root="HKCU" Key="Software\PACS Admin Viewer" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>
   </Package>
